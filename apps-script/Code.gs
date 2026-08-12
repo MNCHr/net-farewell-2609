@@ -206,6 +206,110 @@ function hashPw_(salt, pw) {
   return sha256Base64_(String(salt) + '|' + String(pw));
 }
 
+/** ===================== 인증 ===================== */
+
+function checkLock_(row) {
+  if (!row.lockedUntil) return null;
+  var until = new Date(row.lockedUntil);
+  if (now_().getTime() < until.getTime()) {
+    return err_('LOCKED',
+      '비밀번호를 여러 번 잘못 입력해 잠겼습니다. 잠시 후 다시 시도해주세요.',
+      { lockedUntil: row.lockedUntil });
+  }
+  // 잠금이 지났다 — 카운터를 되돌린다.
+  row.failCount = 0;
+  row.lockedUntil = '';
+  writeRow_(row);
+  return null;
+}
+
+function registerFailure_(row) {
+  row.failCount = Number(row.failCount || 0) + 1;
+  if (row.failCount >= MAX_FAIL) {
+    row.lockedUntil = new Date(now_().getTime() + LOCK_MINUTES * 60000).toISOString();
+    writeRow_(row);
+    return err_('LOCKED',
+      '비밀번호를 ' + MAX_FAIL + '회 잘못 입력해 ' + LOCK_MINUTES + '분간 잠겼습니다.',
+      { lockedUntil: row.lockedUntil });
+  }
+  writeRow_(row);
+  return err_('WRONG_PW', '비밀번호가 일치하지 않습니다.',
+    { remaining: MAX_FAIL - row.failCount });
+}
+
+function clearFailure_(row) {
+  if (Number(row.failCount || 0) !== 0 || row.lockedUntil) {
+    row.failCount = 0;
+    row.lockedUntil = '';
+    writeRow_(row);
+  }
+}
+
+/**
+ * 자격 판정. 성공하면 { row, mode, empNo, name, pw }, 실패하면 오류 응답을 돌려준다.
+ * 반환값에 .ok 가 있으면 오류다.
+ *
+ * 이 함수는 절대 스스로 락을 잡지 않는다. 호출자(handleAuth_/handleSave_)가
+ * 이미 withLock_ 안에 있기 때문이며, 여기서 또 잡으면 중첩 획득이 된다.
+ */
+function verifyCredentials_(req) {
+  var empNo = normalizeEmpNo_(req.empNo);
+  if (!empNo) return err_('BAD_EMPNO', '사번은 숫자 5자리입니다. 다시 확인해주세요.');
+
+  var name = normalizeName_(req.name);
+  if (!name) return err_('BAD_NAME', '이름을 입력해주세요.');
+
+  var pw = normalizePw_(req.pw);
+  if (!pw) return err_('BAD_PW', '비밀번호는 숫자 4자리입니다.');
+
+  var rows = readRows_();
+  var row = findByEmpNo_(rows, empNo);
+
+  if (!row) return { row: null, mode: 'new', empNo: empNo, name: name, pw: pw };
+
+  if (row.name !== name) {
+    return err_('NAME_MISMATCH', '사번과 이름이 일치하지 않습니다. 다시 확인해주세요.');
+  }
+
+  var locked = checkLock_(row);
+  if (locked) return locked;
+
+  // 관리자가 대리 입력한 행은 비밀번호가 없다. 이 사람이 지금 이어받는다.
+  if (!row.pwHash) {
+    return { row: row, mode: 'claim', empNo: empNo, name: name, pw: pw };
+  }
+
+  if (hashPw_(row.salt, pw) !== row.pwHash) {
+    return registerFailure_(row);
+  }
+
+  clearFailure_(row);
+  return { row: row, mode: 'existing', empNo: empNo, name: name, pw: pw };
+}
+
+/**
+ * auth 는 읽기처럼 보이지만 failCount 를 쓴다.
+ * 락이 없으면 동시에 들어온 두 번의 오입력이 둘 다 3을 읽고 4를 써서
+ * 5회 잠금이 영영 걸리지 않는다. 그래서 save 와 똑같이 감싼다.
+ */
+function handleAuth_(req) {
+  return withLock_(function () {
+    var v = verifyCredentials_(req);
+    if (v.ok === false) return v;
+
+    return ok_({
+      mode: v.mode,
+      empNo: v.empNo,
+      name: v.name,
+      picks: {
+        A: v.row ? !!v.row.pickA : false,
+        B: v.row ? !!v.row.pickB : false,
+      },
+      updatedAt: v.row ? v.row.updatedAt : '',
+    });
+  });
+}
+
 /** ===================== 진입점 ===================== */
 
 function doPost(e) {
@@ -245,6 +349,7 @@ function handleRequest_(req) {
     }
     switch (req.action) {
       case 'ping': return handlePing_();
+      case 'auth': return handleAuth_(req);
       default: return err_('SERVER_ERROR', '알 수 없는 요청입니다.');
     }
   } catch (e) {
