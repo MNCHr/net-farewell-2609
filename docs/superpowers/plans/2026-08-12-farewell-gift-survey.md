@@ -1577,7 +1577,8 @@ git commit -m "feat: 시트 저장소 계층과 비밀번호 해시"
 - Produces:
   - `handleAuth_(req)` → `ok_({ mode, empNo, name, picks:{A,B}, updatedAt })`
     - `mode` ∈ `'new'` | `'existing'` | `'claim'`
-  - `verifyCredentials_(rows, req) → { row, mode } | {error 응답}` — `handleSave_`가 재사용한다
+  - `verifyCredentials_(req) → { row, mode, empNo, name, pw } | {error 응답}` — `handleSave_`가 재사용한다.
+    행은 내부에서 `readRows_()` 로 직접 읽는다 (호출자가 주입하지 않는다)
   - `checkLock_(row) → null | err_('LOCKED', ...)`
   - `registerFailure_(row)`, `clearFailure_(row)`
   - `handleRequest_`에 `auth` 케이스 등록

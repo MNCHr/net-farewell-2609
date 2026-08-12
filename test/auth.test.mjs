@@ -101,6 +101,23 @@ test('관리자 대리 입력 행(비번 없음)은 mode=claim 이고 비번을 
   assert.equal(s.rows()[0][4], '', 'auth 만으로 비번을 설정하면 안 된다 — save 에서 한다');
 });
 
+test('잠금이 풀린 뒤 또 틀리면 카운터가 0에서 다시 1로 시작한다', () => {
+  // 잠금 해제 직후의 첫 요청이 '틀린 비밀번호'인 경로. checkLock_ 이 카운터를 0으로
+  // 되돌려 쓰고, 곧바로 registerFailure_ 가 1로 올려 다시 쓴다 — 한 요청에서 두 번 쓴다.
+  // 여기가 어긋나면 잠금이 풀린 사람이 5회가 아니라 1회 만에 다시 잠기거나,
+  // 반대로 영영 안 잠긴다.
+  const s = loadServer({
+    responses: [rowWithPw({ failCount: 5, lockedUntil: '2026-08-12T09:05:00.000Z' })],
+  });
+  s.setNow('2026-08-12T09:06:00.000Z');
+
+  const res = s.call({ action: 'auth', empNo: '01234', name: '홍길동', pw: '0000' });
+  assert.equal(res.error, 'WRONG_PW');
+  assert.equal(res.remaining, 4, '해제 후 첫 실패이므로 4회가 남아야 한다');
+  assert.equal(s.rows()[0][10], 1, 'failCount 는 5가 아니라 1이어야 한다');
+  assert.equal(s.rows()[0][11], '', 'lockedUntil 은 비워진 채여야 한다');
+});
+
 test('삭제된 행은 없는 것으로 보아 mode=new', () => {
   const s = loadServer({ responses: [rowWithPw({ status: 'deleted' })] });
   const res = s.call({ action: 'auth', empNo: '01234', name: '홍길동', pw: '1234' });
