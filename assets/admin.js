@@ -12,11 +12,19 @@ let stale = false;      // 쓰기는 성공했는데 새로고침이 실패해, 
 function showErr(id, msg) { const b = $(id); b.textContent = msg; b.hidden = false; }
 function clearErr(id) { $(id).hidden = true; }
 
-/** 쓰기 성공 뒤 새로고침이 실패하면 표를 그대로 두되, 최신이 아닐 수 있다고 밝히고 복사를 막는다. */
-function setStale(isStale) {
+/**
+ * 쓰기 성공 뒤 새로고침이 실패하면 표를 그대로 두되, 최신이 아닐 수 있다고 밝히고
+ * 복사와 저장을 막는다 — 최신인지 모르는 화면은 표 복사(정산)의 근거도, 저장 확인창
+ * (겹침 판정)의 근거도 될 수 없다. message 는 실패한 새로고침의 res.message — 있으면
+ * 배너 안에 이유로 얹는다. 화면에는 항상 이 배너 하나만 있어야 하므로, 여기서 지우고
+ * 여기서만 채운다.
+ */
+function setStale(isStale, message) {
   stale = isStale;
   $('stale-banner').hidden = !isStale;
+  $('stale-reason').textContent = (isStale && message) ? `새로고침이 실패한 이유: ${message}` : '';
   $('btn-copy').disabled = isStale;
+  $('btn-upsert').disabled = isStale;
 }
 
 /* ---------- 진입 ---------- */
@@ -45,29 +53,30 @@ $('btn-enter').addEventListener('click', enter);
 $('admin-pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') enter(); });
 
 /**
- * 목록을 다시 불러온다. 성공하면 true, 실패하면 false 를 돌려준다.
+ * 목록을 다시 불러온다. { ok, message } 를 돌려준다 — 실패하면 message 에 서버 사유가 실린다
+ * (호출자가 그걸 배너에 실을 수도, 버릴 수도 있다).
  * reportError=false 로 부르면(쓰기 성공 뒤 후속 새로고침) list-err 에는 띄우지 않는다 —
  * 그 자리는 "이 작업 자체가 실패했다"는 뜻으로 쓰이므로, 성공한 작업을 실패로 오인하게 만들면 안 된다.
- * 그 경우 호출자가 setStale(true) 로 별도의 배너를 띄운다.
+ * 그 경우 호출자가 setStale(true, message) 로 별도의 배너를 띄운다.
  */
 async function refresh({ reportError = true } = {}) {
   clearErr('list-err');
   const res = await api.send({ action: 'adminData', adminPw });
   if (!res.ok) {
     if (reportError) showErr('list-err', res.message || '오류가 발생했습니다.');
-    return false;
+    return { ok: false, message: res.message };
   }
   render(res.data);
   setStale(false);
-  return true;
+  return { ok: true };
 }
 $('btn-refresh').addEventListener('click', () => refresh());
 $('btn-stale-retry').addEventListener('click', () => refresh());
 
 /** 쓰기(수정/삭제/저장)가 성공한 뒤 호출한다. 후속 새로고침이 실패하면 stale 배너로 알린다. */
 async function refreshAfterWrite() {
-  const ok = await refresh({ reportError: false });
-  if (!ok) setStale(true);
+  const res = await refresh({ reportError: false });
+  if (!res.ok) setStale(true, res.message);
 }
 
 /* ---------- 렌더 ---------- */
@@ -254,6 +263,9 @@ function showSaved(created) {
 }
 
 $('btn-upsert').addEventListener('click', async () => {
+  // 최신 상태가 아닐 수 있는 lastRows 를 근거로 겹침을 판정해 저장하면 안 된다 — 표 복사와
+  // 같은 이유. 버튼을 disabled 로 두는 것과 별개로, 여기서도 독립적으로 막는다.
+  if (stale) return showErr('u-err', '목록을 다시 불러오지 못해 최신 상태인지 알 수 없어 저장을 막았습니다. 위 배너의 다시 불러오기를 누른 뒤 다시 시도해주세요.');
   clearErr('u-err');
   $('u-saved').hidden = true;
   const empNo = normalizeEmpNo($('u-empno').value);
