@@ -24,6 +24,44 @@ function now_() {
   return new Date();
 }
 
+/** ===================== 정규화 =====================
+ * assets/normalize.js 와 같은 규칙이다. 한쪽만 고치면 안 된다.
+ */
+
+var EMPNO_LENGTH = 5;
+var PW_LENGTH = 4;
+var NAME_MAX = 20;
+
+var WS_RE_ = /[\s　​-‍﻿]/g;
+
+function toHalfWidthDigits_(s) {
+  return s.replace(/[０-９]/g, function (c) {
+    return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 0x30);
+  });
+}
+
+function normalizeEmpNo_(raw) {
+  if (raw === null || raw === undefined) return null;
+  var digits = toHalfWidthDigits_(String(raw)).replace(/[^0-9]/g, '');
+  if (digits.length === 0 || digits.length > EMPNO_LENGTH) return null;
+  while (digits.length < EMPNO_LENGTH) digits = '0' + digits;   // padStart 는 쓰지 않는다
+  return digits;
+}
+
+function normalizeName_(raw) {
+  if (raw === null || raw === undefined) return null;
+  var cleaned = String(raw).normalize('NFC').replace(WS_RE_, '');
+  if (cleaned.length === 0 || cleaned.length > NAME_MAX) return null;
+  return cleaned;
+}
+
+function normalizePw_(raw) {
+  if (raw === null || raw === undefined) return null;
+  var s = toHalfWidthDigits_(String(raw)).replace(WS_RE_, '');
+  if (!/^[0-9]{4}$/.test(s)) return null;
+  return s;
+}
+
 function ok_(data) {
   return { ok: true, data: data };
 }
