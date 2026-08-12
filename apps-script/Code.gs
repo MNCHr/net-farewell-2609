@@ -310,6 +310,57 @@ function handleAuth_(req) {
   });
 }
 
+/** ===================== 저장 ===================== */
+
+function handleSave_(req) {
+  return withLock_(function () {
+    var v = verifyCredentials_(req);
+    if (v.ok === false) return v;
+
+    var iso = now_().toISOString();
+    var pickA = boolOf_(req.pickA);
+    var pickB = boolOf_(req.pickB);
+    var row = v.row;
+    var action;
+
+    if (!row) {
+      // 삭제된 행이 있으면 되살린다. 같은 사번의 active 행이 둘이 되면 안 된다.
+      var buried = findAnyByEmpNo_(readRows_(), v.empNo);
+      if (buried.length > 0) {
+        row = buried[0];
+        row.status = 'active';
+        row.name = v.name;
+        action = 'update';
+      } else {
+        row = blankRow_(v.empNo, v.name);
+        action = 'create';
+      }
+    } else {
+      action = 'update';
+    }
+
+    if (!row.pwHash) {                 // 신규이거나 관리자 대리 입력 행
+      row.salt = newSalt_();
+      row.pwHash = hashPw_(row.salt, v.pw);
+      if (action !== 'create') action = 'claim';
+    }
+
+    row.pickA = pickA;
+    row.pickB = pickB;
+    row.updatedAt = iso;
+    row.updatedBy = 'self';
+    row.failCount = 0;
+    row.lockedUntil = '';
+    if (!row.createdAt) row.createdAt = iso;
+
+    if (row.rowIndex) writeRow_(row); else appendRow_(row);
+
+    writeLog_(action, v.empNo, 'self', 'A=' + pickA + ' B=' + pickB);
+
+    return ok_({ picks: { A: pickA, B: pickB }, updatedAt: iso });
+  });
+}
+
 /** ===================== 진입점 ===================== */
 
 function doPost(e) {
@@ -350,6 +401,7 @@ function handleRequest_(req) {
     switch (req.action) {
       case 'ping': return handlePing_();
       case 'auth': return handleAuth_(req);
+      case 'save': return handleSave_(req);
       default: return err_('SERVER_ERROR', '알 수 없는 요청입니다.');
     }
   } catch (e) {
