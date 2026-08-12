@@ -35,6 +35,11 @@
     <section class="card">
       <h1>응답 명단</h1>
       <div id="list-err" class="err" hidden></div>
+      <div id="stale-banner" class="warn" hidden>
+        방금 한 작업은 서버에 반영됐지만, 목록을 다시 불러오지 못해 아래 화면이 최신 상태가 아닐 수 있습니다.
+        다시 불러오기 전에는 표 복사를 쓸 수 없습니다.
+        <button id="btn-stale-retry" class="ghost">다시 불러오기</button>
+      </div>
       <div class="scroll"><table id="rows"></table></div>
       <button id="btn-copy" class="ghost">표 복사</button>
       <p class="muted" id="copied" hidden>클립보드에 담았습니다. 엑셀에 붙여넣으세요.</p>
@@ -50,6 +55,7 @@
       <div id="u-picks"></div>
       <div id="u-err" class="err" hidden></div>
       <button id="btn-upsert">저장</button>
+      <p class="muted" id="u-saved" hidden></p>
       <p class="muted">비밀번호는 설정하지 않습니다. 본인이 나중에 직접 로그인할 때 정하게 됩니다.</p>
     </section>
   </div>

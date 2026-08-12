@@ -7,9 +7,17 @@ const $ = (id) => document.getElementById(id);
 
 let adminPw = '';       // 메모리에만 둔다. 저장하지 않는다.
 let lastRows = [];
+let stale = false;      // 쓰기는 성공했는데 새로고침이 실패해, 화면이 최신인지 보장 못하는 상태.
 
 function showErr(id, msg) { const b = $(id); b.textContent = msg; b.hidden = false; }
 function clearErr(id) { $(id).hidden = true; }
+
+/** 쓰기 성공 뒤 새로고침이 실패하면 표를 그대로 두되, 최신이 아닐 수 있다고 밝히고 복사를 막는다. */
+function setStale(isStale) {
+  stale = isStale;
+  $('stale-banner').hidden = !isStale;
+  $('btn-copy').disabled = isStale;
+}
 
 /* ---------- 진입 ---------- */
 
@@ -36,13 +44,31 @@ async function enter() {
 $('btn-enter').addEventListener('click', enter);
 $('admin-pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') enter(); });
 
-async function refresh() {
+/**
+ * 목록을 다시 불러온다. 성공하면 true, 실패하면 false 를 돌려준다.
+ * reportError=false 로 부르면(쓰기 성공 뒤 후속 새로고침) list-err 에는 띄우지 않는다 —
+ * 그 자리는 "이 작업 자체가 실패했다"는 뜻으로 쓰이므로, 성공한 작업을 실패로 오인하게 만들면 안 된다.
+ * 그 경우 호출자가 setStale(true) 로 별도의 배너를 띄운다.
+ */
+async function refresh({ reportError = true } = {}) {
   clearErr('list-err');
   const res = await api.send({ action: 'adminData', adminPw });
-  if (!res.ok) return showErr('list-err', res.message || '오류가 발생했습니다.');
+  if (!res.ok) {
+    if (reportError) showErr('list-err', res.message || '오류가 발생했습니다.');
+    return false;
+  }
   render(res.data);
+  setStale(false);
+  return true;
 }
-$('btn-refresh').addEventListener('click', refresh);
+$('btn-refresh').addEventListener('click', () => refresh());
+$('btn-stale-retry').addEventListener('click', () => refresh());
+
+/** 쓰기(수정/삭제/저장)가 성공한 뒤 호출한다. 후속 새로고침이 실패하면 stale 배너로 알린다. */
+async function refreshAfterWrite() {
+  const ok = await refresh({ reportError: false });
+  if (!ok) setStale(true);
+}
 
 /* ---------- 렌더 ---------- */
 
@@ -156,7 +182,7 @@ async function resetPw(r) {
              + '다음 로그인 때 입력하는 비밀번호가 새 비밀번호가 됩니다. 계속할까요?')) return;
   const res = await api.send({ action: 'adminResetPw', adminPw, empNo: r.empNo });
   if (!res.ok) return showErr('list-err', res.message);
-  refresh();
+  await refreshAfterWrite();
 }
 
 async function del(r) {
@@ -164,7 +190,7 @@ async function del(r) {
              + '집계에서 빠지지만 시트에는 기록이 남습니다. 계속할까요?')) return;
   const res = await api.send({ action: 'adminDelete', adminPw, empNo: r.empNo });
   if (!res.ok) return showErr('list-err', res.message);
-  refresh();
+  await refreshAfterWrite();
 }
 
 function loadIntoUpsert(r) {
@@ -191,27 +217,67 @@ function renderUpsertPicks() {
   });
 }
 
+/** empNo 는 이미 normalizeEmpNo 를 거친 값이어야 한다 — lastRows 의 empNo 도 정규화돼 있다. */
+function findExistingRow(empNo) {
+  return lastRows.find((r) => r.empNo === empNo) || null;
+}
+
+function pickText(pickA, pickB) {
+  const picks = [];
+  if (pickA) picks.push(RETIREES[0].label);
+  if (pickB) picks.push(RETIREES[1].label);
+  return picks.length ? picks.join(', ') : '없음';
+}
+
+/**
+ * 저장 전 확인창. 사번이 기존 응답과 겹치면 "덮어쓴다"는 사실과 기존/변경 후 선택을
+ * 나란히 보여준다 — 대리 입력 중 사번 오타로 남의 응답을 지우는 사고를 여기서 잡기 위해서다.
+ * 겹치지 않으면 정규화된 사번·이름으로 새로 추가된다는 점을 보여준다(01234 vs 1234 오인 방지).
+ */
+function confirmUpsert(empNo, name, pickA, pickB) {
+  const existing = findExistingRow(empNo);
+  if (existing) {
+    return confirm(
+      `${existing.name}(${empNo}) 님의 기존 응답을 덮어씁니다.\n`
+      + `기존: ${pickText(existing.pickA, existing.pickB)}\n`
+      + `변경 후: ${name} 님, ${pickText(pickA, pickB)}\n`
+      + '계속할까요?'
+    );
+  }
+  return confirm(`사번 ${empNo}, 이름 ${name} 으로 새 응답을 추가합니다.\n계속할까요?`);
+}
+
+function showSaved(created) {
+  const p = $('u-saved');
+  p.textContent = created ? '새 응답으로 저장했습니다.' : '기존 응답을 수정했습니다.';
+  p.hidden = false;
+}
+
 $('btn-upsert').addEventListener('click', async () => {
   clearErr('u-err');
+  $('u-saved').hidden = true;
   const empNo = normalizeEmpNo($('u-empno').value);
   const name = normalizeName($('u-name').value);
   if (!empNo) return showErr('u-err', '사번은 숫자 5자리입니다.');
   if (!name) return showErr('u-err', '이름을 입력해주세요.');
 
-  const res = await api.send({
-    action: 'adminUpsert', adminPw, empNo, name,
-    pickA: $('up-A').checked, pickB: $('up-B').checked,
-  });
+  const pickA = $('up-A').checked;
+  const pickB = $('up-B').checked;
+  if (!confirmUpsert(empNo, name, pickA, pickB)) return;
+
+  const res = await api.send({ action: 'adminUpsert', adminPw, empNo, name, pickA, pickB });
   if (!res.ok) return showErr('u-err', res.message);
 
   $('u-empno').value = ''; $('u-name').value = '';
   $('up-A').checked = false; $('up-B').checked = false;
-  refresh();
+  showSaved(res.data.created);
+  await refreshAfterWrite();
 });
 
 /* ---------- 표 복사 ---------- */
 
 $('btn-copy').addEventListener('click', async () => {
+  if (stale) return; // 최신 상태가 아닐 수 있는 표를 정산 시트로 복사하면 안 된다.
   const header = ['사번', '이름', RETIREES[0].label, RETIREES[1].label, '최종수정'].join('\t');
   const body = lastRows.map((r) => [
     r.empNo, r.name, r.pickA ? 'O' : '', r.pickB ? 'O' : '', r.updatedAt,
