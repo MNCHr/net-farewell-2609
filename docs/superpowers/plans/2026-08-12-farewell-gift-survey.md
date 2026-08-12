@@ -25,6 +25,8 @@
 - GitHub Pages 사이트는 항상 공개다. `robots.txt` + `<meta name="robots" content="noindex,nofollow">`로 검색엔진 색인을 차단한다
 - **`명단.md`를 비롯한 개인정보 파일을 커밋하지 않는다.** `.gitignore`에 등록되어 있다. 명단이 필요하면 관리자 개인 드라이브의 비공개 시트에만 둔다
 - 시각은 전부 `now_()`(서버) 헬퍼를 거친다. 테스트가 시간을 고정할 수 있어야 한다
+- 각 태스크의 "Expected: PASS — N tests" 는 계획 작성 시점의 추정치다. 리뷰에서 테스트가
+  추가되면 실제 수가 늘어난다. **실제 수가 기준이고, 추정치가 틀렸다고 테스트를 지우지 말 것**
 
 ## 스펙과 다르게 가는 곳
 
@@ -2614,7 +2616,7 @@ function handleAdminDelete_(req) {
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npm test`
-Expected: PASS — 72 tests
+Expected: PASS — 86 tests
 
 - [ ] **Step 5: 커밋**
 
@@ -2900,7 +2902,7 @@ show('step-intro');
 - [ ] **Step 3: 기존 테스트가 여전히 통과하는지 확인**
 
 Run: `npm test`
-Expected: PASS — 72 tests (화면 코드는 단위 테스트 대상이 아니다)
+Expected: PASS — 86 tests (화면 코드는 단위 테스트 대상이 아니다)
 
 - [ ] **Step 4: 브라우저에서 화면 전환 확인**
 
@@ -3234,7 +3236,7 @@ $('btn-copy').addEventListener('click', async () => {
 - [ ] **Step 3: 기존 테스트가 여전히 통과하는지 확인**
 
 Run: `npm test`
-Expected: PASS — 72 tests
+Expected: PASS — 86 tests
 
 - [ ] **Step 4: 브라우저에서 확인**
 
@@ -3427,7 +3429,7 @@ test('108명이 제출해도 집계 합계가 어긋나지 않는다', () => {
 - [ ] **Step 2: 테스트 실행**
 
 Run: `npm test`
-Expected: PASS — 82 tests
+Expected: PASS — 96 tests
 
 **여기서 실패가 나오면 그것이 이 계획의 수확이다.** 단위 테스트는 통과하는데 시나리오가 깨지면, 조각 사이의 이음매에 버그가 있는 것이다. 고치고 다시 돌린다.
 
@@ -3509,7 +3511,7 @@ git commit -m "chore: 운영 배포 설정 (EXEC_URL, 퇴직자 표기)"
 
 ## 완료 기준
 
-- [ ] `npm test` 82개 통과
+- [ ] `npm test` 96개 통과
 - [ ] `git status` 에 `명단.md` 가 없다
 - [ ] 사내망에서 `test.html` 판정이 ① 또는 ②
 - [ ] Task 12 Step 5의 9개 항목을 실제 사이트에서 확인
