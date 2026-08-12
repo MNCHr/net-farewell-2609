@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>연결 진단</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>연결 진단</h1>
+    <p class="sub">사내망에서 어느 통신 경로가 열리는지 확인합니다.</p>
+    <div id="results"></div>
+    <button id="run">다시 검사</button>
+    <button id="copy" class="ghost">결과 전체 복사</button>
+    <p class="muted" id="copied" hidden>복사했습니다. 담당자에게 붙여넣어 주세요.</p>
+  </div>
+</div>
+
+<script type="module">
+import { EXEC_URL } from './assets/config.js';
+import { browserJsonp } from './assets/api.js';
+
+const results = document.getElementById('results');
+const lines = [];
+
+function show(name, okFlag, detail) {
+  lines.push(`${okFlag ? 'OK  ' : 'FAIL'} | ${name} | ${detail}`);
+  const div = document.createElement('div');
+  div.className = 'hint ' + (okFlag ? 'ok' : 'bad');
+  div.textContent = `${okFlag ? '✓' : '✗'} ${name} — ${detail}`;
+  results.appendChild(div);
+}
+
+async function timed(fn) {
+  const t0 = performance.now();
+  try {
+    const value = await fn();
+    return { okFlag: true, ms: Math.round(performance.now() - t0), value };
+  } catch (e) {
+    return { okFlag: false, ms: Math.round(performance.now() - t0), error: e };
+  }
+}
+
+async function run() {
+  results.innerHTML = '';
+  lines.length = 0;
+  lines.push('시각: ' + new Date().toISOString());
+  lines.push('UA: ' + navigator.userAgent);
+  lines.push('EXEC_URL: ' + EXEC_URL);
+  lines.push('');
+
+  if (!EXEC_URL || EXEC_URL.indexOf('PASTE_') === 0) {
+    show('설정', false, 'assets/config.js 의 EXEC_URL 이 아직 비어 있습니다');
+    return;
+  }
+  if (!/\/exec$/.test(EXEC_URL)) {
+    show('설정', false, 'EXEC_URL 이 /exec 로 끝나지 않습니다 (/dev 주소는 쓸 수 없습니다)');
+    return;
+  }
+
+  const a = await timed(async () => {
+    const res = await fetch(EXEC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'ping' }),
+      redirect: 'follow',
+    });
+    const text = await res.text();
+    return { status: res.status, finalUrl: res.url, body: text.slice(0, 200) };
+  });
+  show('① fetch POST (text/plain)', a.okFlag && a.value.status === 200,
+       a.okFlag ? `${a.ms}ms · HTTP ${a.value.status} · ${a.value.body}` : `${a.ms}ms · ${a.error.message}`);
+  if (a.okFlag) lines.push('    최종 URL: ' + a.value.finalUrl);
+
+  const b = await timed(() => browserJsonp(EXEC_URL, { action: 'ping' }, { timeoutMs: 15000 }));
+  show('② JSONP GET', b.okFlag && b.value && b.value.ok === true,
+       b.okFlag ? `${b.ms}ms · ${JSON.stringify(b.value)}` : `${b.ms}ms · ${b.error.message}`);
+
+  const c = await timed(() => new Promise((resolve, reject) => {
+    const img = new Image();
+    const t = setTimeout(() => reject(new Error('시간 초과')), 8000);
+    img.onload = img.onerror = () => { clearTimeout(t); resolve(true); };
+    img.src = 'https://script.googleusercontent.com/favicon.ico?_=' + Date.now();
+  }));
+  show('③ script.googleusercontent.com 도달', c.okFlag,
+       c.okFlag ? `${c.ms}ms` : `${c.ms}ms · ${c.error.message}`);
+
+  const sheetOk = (a.okFlag && /"sheetOk":true/.test(a.value.body))
+               || (b.okFlag && b.value && b.value.data && b.value.data.sheetOk === true);
+  show('④ 시트 접근', !!sheetOk, sheetOk ? '서버가 시트를 읽었습니다' : '확인 실패');
+
+  const verdict = a.okFlag && a.value.status === 200
+    ? '판정: ① fetch 경로로 정상 동작 가능'
+    : (b.okFlag ? '판정: ①은 막힘 → ② JSONP 경로로 동작 가능'
+                : '판정: ①②﻿ 모두 실패 — 화면을 Apps Script 로 옮기는 3차 안이 필요');
+  lines.push('', verdict);
+  const p = document.createElement('p');
+  p.style.fontWeight = '700';
+  p.style.marginTop = '16px';
+  p.textContent = verdict;
+  results.appendChild(p);
+}
+
+document.getElementById('run').addEventListener('click', run);
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+  }
+  document.getElementById('copied').hidden = false;
+});
+
+run();
+</script>
+</body>
+</html>

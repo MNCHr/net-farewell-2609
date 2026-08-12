@@ -1,0 +1,70 @@
+# 퇴임 선물 참여 조사
+
+[설계 문서](docs/superpowers/specs/2026-08-12-farewell-gift-survey-design.md) · [구현 계획](docs/superpowers/plans/2026-08-12-farewell-gift-survey.md)
+
+## ⚠️ 개인정보
+
+이 저장소는 GitHub Pages 때문에 **공개**다. 실명·사번·연락처가 담긴 파일을
+커밋하지 않는다. `명단.md` 등은 `.gitignore`에 등록되어 있다.
+명단이 필요하면 관리자 개인 드라이브의 **비공개 구글시트**에만 둔다.
+
+## 배포 순서
+
+### 1. 구글시트 (개인 gmail 계정으로)
+
+회사 워크스페이스 계정은 「액세스: 모든 사용자」 배포가 정책으로 막힌 경우가 많다.
+반드시 개인 계정을 쓴다.
+
+1. 새 스프레드시트를 만든다
+2. 시트 이름을 `responses` 로 바꾸고, 시트를 하나 더 추가해 `log` 로 이름 짓는다
+3. `responses` 1행에 헤더를 넣는다:
+   `empNo  name  pickA  pickB  pwHash  salt  createdAt  updatedAt  updatedBy  status  failCount  lockedUntil`
+4. `log` 1행에 헤더를 넣는다: `at  action  empNo  actor  detail`
+5. **`responses` A열 전체를 선택 → 서식 → 숫자 → 일반 텍스트**
+   (이걸 빼면 사번 `01234` 가 `1234` 로 바뀐다)
+
+### 2. Apps Script
+
+1. 확장 프로그램 → Apps Script
+2. **프로젝트 설정 → 「Chrome V8 런타임 사용」이 켜져 있는지 확인한다.**
+   구형 Rhino 런타임에서는 `String.prototype.normalize` 가 없어 이름 정규화가 죽는다
+3. `apps-script/Code.gs` 내용을 전부 붙여넣는다
+4. 함수 목록에서 `setupAdminPassword` 를 고르고, 코드 안의 `'CHANGE_ME'` 를
+   실제 관리자 비밀번호로 바꾼 뒤 **한 번 실행**한다 (권한 승인 필요)
+5. 실행이 끝나면 코드의 비밀번호를 다시 `'CHANGE_ME'` 로 되돌리고 저장한다
+6. 배포 → 새 배포 → 유형: **웹 앱**
+   - 설명: 아무거나
+   - 실행: **나**
+   - 액세스 권한: **모든 사용자**
+7. 배포 후 나오는 **웹 앱 URL**을 복사한다 (`/exec` 로 끝나야 한다)
+
+> 코드를 고칠 때마다 **배포 → 배포 관리 → 편집 → 버전: 새 버전** 을 해야 반영된다.
+> 저장만 해서는 `/exec` 주소의 내용이 바뀌지 않는다.
+
+### 3. GitHub Pages
+
+1. GitHub에 저장소를 만들고 push 한다
+2. Settings → Pages → Source: `Deploy from a branch`, Branch: `main` / `(root)`
+3. 몇 분 뒤 `https://<계정>.github.io/<저장소>/` 로 열린다
+
+### 4. 연결
+
+1. `assets/config.js` 의 `EXEC_URL` 에 2-7에서 복사한 주소를 넣는다
+2. `RETIREES` 의 `label` 두 개를 실제 표기로 고친다
+3. commit & push
+4. **사내망 PC**에서 `https://<계정>.github.io/<저장소>/test.html` 을 연다
+5. `[결과 전체 복사]` 를 눌러 진단 결과를 담당자에게 전달한다
+
+## 로컬 개발
+
+```bash
+npm test          # 단위 테스트 (node 18+)
+npm run serve     # http://localhost:8080 — ES 모듈은 file:// 로 못 여니 서버가 필요하다
+```
+
+## 행사 종료 후
+
+1. 구글시트에서 필요한 집계를 내려받는다
+2. 구글시트와 Apps Script 프로젝트를 **삭제**한다
+3. Apps Script 배포를 보관 처리한다
+4. GitHub 저장소를 삭제하거나 Pages 를 끈다
