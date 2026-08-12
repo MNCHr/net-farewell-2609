@@ -1952,6 +1952,30 @@ test('삭제된 사번으로 다시 제출하면 새 행이 아니라 기존 행
   assert.equal(s.rows()[0][9], 'active');
 });
 
+test('되살아난 행은 삭제 전 비밀번호가 아니라 새로 제출한 비밀번호로 인증된다', () => {
+  const s = loadServer({ responses: [withPw({ status: 'deleted' })] });
+  const res = s.call({ action: 'save', empNo: '01234', name: '홍길동', pw: '5555', pickA: true, pickB: false });
+  assert.equal(res.ok, true);
+
+  // 여전히 행은 하나이고 active 다.
+  assert.equal(s.rows().length, 1, '같은 사번의 active 행이 둘이 되면 안 된다');
+  assert.equal(s.rows()[0][9], 'active');
+
+  // 새로 제출한 비밀번호로 로그인이 되어야 한다.
+  const authNew = s.call({ action: 'auth', empNo: '01234', name: '홍길동', pw: '5555' });
+  assert.equal(authNew.ok, true, '새로 제출한 비밀번호가 통해야 한다');
+  assert.equal(authNew.data.mode, 'existing', '새로 제출한 비밀번호가 통해야 한다');
+
+  // 삭제 전 비밀번호는 더 이상 통하면 안 된다.
+  const authOld = s.call({ action: 'auth', empNo: '01234', name: '홍길동', pw: '1234' });
+  assert.equal(authOld.error, 'WRONG_PW', '삭제 전 비밀번호는 죽어야 한다');
+
+  // log 에는 되살림이 revive 로 남아야 한다 (update/claim 이 아니라).
+  const logs = s.logRows();
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0][1], 'revive');
+});
+
 test('비밀번호가 틀리면 저장하지 않는다', () => {
   const s = loadServer({ responses: [withPw()] });
   const res = s.call({ action: 'save', empNo: '01234', name: '홍길동', pw: '0000', pickA: true, pickB: true });
@@ -2022,7 +2046,11 @@ function handleSave_(req) {
         row = buried[0];
         row.status = 'active';
         row.name = v.name;
-        action = 'update';
+        row.pwHash = '';   // 되살리기는 곧 재가입이다 — 삭제 전 비밀번호는 살아남지 않는다
+        row.salt = '';
+        // createdAt 은 일부러 그대로 둔다: 삭제 전 이 사람이 처음 응답한 시점이라
+        // 되살아났다고 바뀌면 안 된다.
+        action = 'revive';
       } else {
         row = blankRow_(v.empNo, v.name);
         action = 'create';
@@ -2031,10 +2059,10 @@ function handleSave_(req) {
       action = 'update';
     }
 
-    if (!row.pwHash) {                 // 신규이거나 관리자 대리 입력 행
+    if (!row.pwHash) {                 // 신규이거나 관리자 대리 입력 행, 또는 되살아난 행
       row.salt = newSalt_();
       row.pwHash = hashPw_(row.salt, v.pw);
-      if (action !== 'create') action = 'claim';
+      if (action !== 'create' && action !== 'revive') action = 'claim';
     }
 
     row.pickA = pickA;

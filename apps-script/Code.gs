@@ -330,7 +330,11 @@ function handleSave_(req) {
         row = buried[0];
         row.status = 'active';
         row.name = v.name;
-        action = 'update';
+        row.pwHash = '';   // 되살리기는 곧 재가입이다 — 삭제 전 비밀번호는 살아남지 않는다
+        row.salt = '';
+        // createdAt 은 일부러 그대로 둔다: 삭제 전 이 사람이 처음 응답한 시점이라
+        // 되살아났다고 바뀌면 안 된다.
+        action = 'revive';
       } else {
         row = blankRow_(v.empNo, v.name);
         action = 'create';
@@ -339,10 +343,10 @@ function handleSave_(req) {
       action = 'update';
     }
 
-    if (!row.pwHash) {                 // 신규이거나 관리자 대리 입력 행
+    if (!row.pwHash) {                 // 신규이거나 관리자 대리 입력 행, 또는 되살아난 행
       row.salt = newSalt_();
       row.pwHash = hashPw_(row.salt, v.pw);
-      if (action !== 'create') action = 'claim';
+      if (action !== 'create' && action !== 'revive') action = 'claim';
     }
 
     row.pickA = pickA;
