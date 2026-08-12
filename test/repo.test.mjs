@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadServer, HEADER_RESPONSES } from './harness/load-code-gs.mjs';
+import { loadServer, hostify, HEADER_RESPONSES } from './harness/load-code-gs.mjs';
 
 const A = ['01234', '홍길동', true, false, 'HASH', 'SALT',
            '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', 'self', 'active', 0, ''];
@@ -22,10 +22,10 @@ test('빈 시트에서 readRows_ 는 빈 배열', () => {
   const s = loadServer();
   // s.fn.readRows_() 는 하네스의 call()/rows()/logRows() 경계를 거치지 않고 sandbox 함수를
   // 직접 호출한다 (fn 은 의도적으로 hostify 하지 않는다 — load-code-gs.mjs 참고). 그래서
-  // 돌려받는 배열은 여전히 sandbox realm 이고, host `[]` 리터럴과 deepEqual 로 비교하면
-  // 내용이 같아도 realm 불일치로 실패한다. 여기서는 "비어 있는가"만 확인하면 되므로
-  // realm 이 없는 원시값(length)을 비교해 그 문제를 피한다.
-  assert.equal(s.fn.readRows_().length, 0);
+  // s.fn 은 sandbox 를 그대로 노출하므로 하네스의 hostify 경계를 지나지 않는다.
+  // 돌려받는 배열은 sandbox realm 이라 host `[]` 리터럴과 deepEqual 하면
+  // 내용이 같아도 realm 불일치로 실패한다. 직접 호출할 때는 hostify 를 명시적으로 쓴다.
+  assert.deepEqual(hostify(s.fn.readRows_()), []);
 });
 
 test('시트에 숫자로 저장된 사번도 정규화해서 읽는다', () => {
