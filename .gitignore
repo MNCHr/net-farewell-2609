@@ -13,3 +13,6 @@
 # 로컬 개발
 node_modules/
 .DS_Store
+
+# SDD 진행 스크래치
+/.superpowers/
