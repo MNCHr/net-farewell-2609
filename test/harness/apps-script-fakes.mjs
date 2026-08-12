@@ -72,3 +72,21 @@ export function makeLockService({ fail = false } = {}) {
     }),
   };
 }
+
+// Code.gs 가 쓰는 표면만 흉내낸다: createTextOutput(text).setMimeType(m) 체이닝과,
+// 테스트가 결과를 꺼내볼 수 있는 getContent()/getMimeType().
+export function makeContentService() {
+  return {
+    createTextOutput(text) {
+      const out = {
+        _content: String(text),
+        _mimeType: null,
+        setMimeType(m) { out._mimeType = m; return out; },
+        getContent: () => out._content,
+        getMimeType: () => out._mimeType,
+      };
+      return out;
+    },
+    MimeType: { JSON: 'application/json', JAVASCRIPT: 'application/javascript' },
+  };
+}

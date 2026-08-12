@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import {
   makeUtilities, makeSheet, makeSpreadsheetApp, makePropertiesService, makeLockService,
+  makeContentService,
 } from './apps-script-fakes.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -30,6 +31,7 @@ export function loadServer({
     SpreadsheetApp: makeSpreadsheetApp(sheets),
     PropertiesService: makePropertiesService(properties),
     LockService: makeLockService({ fail: lockFails }),
+    ContentService: makeContentService(),
     console,
   };
   vm.createContext(sandbox);
