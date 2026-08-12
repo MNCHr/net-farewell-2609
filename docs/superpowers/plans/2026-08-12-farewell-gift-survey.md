@@ -909,7 +909,7 @@ async function run() {
   const verdict = a.okFlag && a.value.status === 200
     ? '판정: ① fetch 경로로 정상 동작 가능'
     : (b.okFlag ? '판정: ①은 막힘 → ② JSONP 경로로 동작 가능'
-                : '판정: ①②﻿ 모두 실패 — 화면을 Apps Script 로 옮기는 3차 안이 필요');
+                : '판정: ①② 모두 실패 — 화면을 Apps Script 로 옮기는 3차 안이 필요');
   lines.push('', verdict);
   const p = document.createElement('p');
   p.style.fontWeight = '700';
@@ -1184,7 +1184,7 @@ Expected: FAIL — `Cannot find module '../assets/normalize.js'`
 const FULLWIDTH_DIGITS = /[０-９]/g;
 const NON_DIGIT = /[^0-9]/g;
 // \s 는 U+3000 도 포함하지만, 제로폭 문자는 따로 지워야 한다.
-const WHITESPACE = /[\s　​-‍﻿]/g;
+const WHITESPACE = /[\s　​-‍]/g;
 
 export const EMPNO_LENGTH = 5;
 export const PW_LENGTH = 4;
@@ -1232,7 +1232,7 @@ var EMPNO_LENGTH = 5;
 var PW_LENGTH = 4;
 var NAME_MAX = 20;
 
-var WS_RE_ = /[\s　​-‍﻿]/g;
+var WS_RE_ = /[\s　​-‍]/g;
 
 function toHalfWidthDigits_(s) {
   return s.replace(/[０-９]/g, function (c) {
