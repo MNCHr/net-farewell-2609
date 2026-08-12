@@ -69,9 +69,15 @@ async function run() {
       redirect: 'follow',
     });
     const text = await res.text();
-    return { status: res.status, finalUrl: res.url, body: text.slice(0, 200) };
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch (e) { /* 프록시 차단 페이지가 200 으로 오는 경우가 있다 */ }
+    return { status: res.status, finalUrl: res.url, body: text.slice(0, 200), parsed };
   });
-  show('① fetch POST (text/plain)', a.okFlag && a.value.status === 200,
+  // HTTP 200 만으로는 안 된다 — 사내 프록시가 차단 페이지를 200으로 돌려주는 일이 흔하다.
+  // assets/api.js 도 JSON 파싱과 ok:true 를 요구한다. 여기서도 같은 기준이어야
+  // "① 로 정상 동작 가능"이라는 판정이 실제 화면의 동작과 일치한다.
+  const aWorks = a.okFlag && !!a.value.parsed && a.value.parsed.ok === true;
+  show('① fetch POST (text/plain)', aWorks,
        a.okFlag ? `${a.ms}ms · HTTP ${a.value.status} · ${a.value.body}` : `${a.ms}ms · ${a.error.message}`);
   if (a.okFlag) lines.push('    최종 URL: ' + a.value.finalUrl);
 
@@ -88,11 +94,20 @@ async function run() {
   show('③ script.googleusercontent.com 도달', c.okFlag,
        c.okFlag ? `${c.ms}ms` : `${c.ms}ms · ${c.error.message}`);
 
-  const sheetOk = (a.okFlag && /"sheetOk":true/.test(a.value.body))
-               || (b.okFlag && b.value && b.value.data && b.value.data.sheetOk === true);
+  const pingData = (aWorks && a.value.parsed.data)
+                 || (b.okFlag && b.value && b.value.ok === true && b.value.data)
+                 || null;
+
+  const sheetOk = pingData && pingData.sheetOk === true;
   show('④ 시트 접근', !!sheetOk, sheetOk ? '서버가 시트를 읽었습니다' : '확인 실패');
 
-  const verdict = a.okFlag && a.value.status === 200
+  // 시트는 만들었지만 1행 헤더를 빼먹은 경우를 여기서 잡는다 — sheetOk 는 true 인데도
+  // 첫 응답자의 제출이 헤더 자리에 실려 조용히 사라지는 사고가 실제로 있었다.
+  const headerOk = pingData && pingData.headerOk === true;
+  show('⑤ 헤더 행 확인', !!headerOk,
+       headerOk ? 'responses 1행 헤더가 올바릅니다' : '헤더가 없거나 철자·순서가 다릅니다 — README 1.3 확인');
+
+  const verdict = aWorks
     ? '판정: ① fetch 경로로 정상 동작 가능'
     : (b.okFlag ? '판정: ①은 막힘 → ② JSONP 경로로 동작 가능'
                 : '판정: ①② 모두 실패 — 화면을 Apps Script 로 옮기는 3차 안이 필요');

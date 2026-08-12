@@ -32,7 +32,10 @@ var EMPNO_LENGTH = 5;
 var PW_LENGTH = 4;
 var NAME_MAX = 20;
 
-var WS_RE_ = /[\s　​-‍﻿]/g;
+var WS_RE_ = /[\s\u3000\u200B-\u200D\uFEFF]/g;
+// PW_LENGTH 를 실제로 쓴다 — 상수를 선언만 해두고 정작 규칙은 정규식에 4를 박아두면,
+// 둘 중 하나만 고치는 날 값이 어긋난다. assets/normalize.js 도 같은 방식으로 PW_RE 를 쓴다.
+var PW_RE_ = new RegExp('^[0-9]{' + PW_LENGTH + '}$');
 
 function toHalfWidthDigits_(s) {
   return s.replace(/[０-９]/g, function (c) {
@@ -58,7 +61,7 @@ function normalizeName_(raw) {
 function normalizePw_(raw) {
   if (raw === null || raw === undefined) return null;
   var s = toHalfWidthDigits_(String(raw)).replace(WS_RE_, '');
-  if (!/^[0-9]{4}$/.test(s)) return null;
+  if (!PW_RE_.test(s)) return null;
   return s;
 }
 
@@ -449,7 +452,12 @@ function computeStats_(rows) {
 function computeWarnings_(rows) {
   var warnings = [];
 
-  var byName = {};
+  // Object.create(null) 을 쓴다 — {} 는 Object.prototype 을 물려받아서, 이름이
+  // 'constructor'/'toString'/'hasOwnProperty'/'__proto__' 등이면 byName[n] 이
+  // 상속된 프로퍼티(함수 등)로 읽혀 truthy가 되고, 뒤이은 byName[n].indexOf(...) 가
+  // 함수를 배열처럼 다뤄 던진다. 그 예외는 handleRequest_ 의 catch 까지 올라가
+  // adminData 전체를 SERVER_ERROR 로 죽인다 — 실제로 있었던 버그다.
+  var byName = Object.create(null);
   var act = activeRows_(rows);
   for (var i = 0; i < act.length; i += 1) {
     var n = act[i].name;
@@ -462,8 +470,8 @@ function computeWarnings_(rows) {
     }
   }
 
-  // 같은 사번은 active 가 하나뿐이므로 삭제분까지 봐야 잡힌다.
-  var byEmp = {};
+  // 같은 사번은 active 가 하나뿐이므로 삭제분까지 봐야 잡힌다. 같은 이유로 Object.create(null).
+  var byEmp = Object.create(null);
   for (var j = 0; j < rows.length; j += 1) {
     var e = rows[j].empNo;
     if (!byEmp[e]) byEmp[e] = [];
@@ -491,7 +499,7 @@ function publicRow_(r) {
 
 /**
  * adminData 는 읽기 전용처럼 보이지만 requireAdmin_ 이 실패 카운터를 읽고 쓴다.
- * handleAuth_ 위 주석과 같은 이유(290행 부근)로, 락 없이는 동시에 들어온 두 번의
+ * handleAuth_ 위 주석과 같은 이유로, 락 없이는 동시에 들어온 두 번의
  * 오입력이 둘 다 같은 카운터 값을 읽고 같은 값을 써서 5회 잠금이 걸리지 않는다.
  * adminData 는 트래픽이 가장 많은 관리자 엔드포인트라 이 레이스가 가장 먼저 걸린다 —
  * "읽기니까 락이 필요 없다"고 다시 빼면 안 된다.
@@ -648,18 +656,49 @@ function handleRequest_(req) {
       default: return err_('SERVER_ERROR', '알 수 없는 요청입니다.');
     }
   } catch (e) {
+    // 사용자에게는 일반 문구만 보여주고, 상세(스택 포함)는 실행 로그에만 남긴다.
+    // 여기서 로그를 남기지 않으면 Apps Script 실행 로그는 이 실행을 "정상 종료"로
+    // 기록하므로, 예외가 catch 되는 순간 사고를 되짚을 단서가 어디에도 남지 않는다.
+    console.error('handleRequest_ 실패: ' + (e && e.stack ? e.stack : e));
     return err_('SERVER_ERROR', '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
   }
 }
 
 /** ===================== 진단 ===================== */
 
+/** responses 1행이 갖춰야 할 헤더. README 1.3, test.html 이 이 순서를 그대로 안내한다. */
+var HEADER_RESPONSES_ = [
+  'empNo', 'name', 'pickA', 'pickB', 'pwHash', 'salt',
+  'createdAt', 'updatedAt', 'updatedBy', 'status', 'failCount', 'lockedUntil',
+];
+
+function headerRowOk_(row) {
+  if (!row) return false;
+  for (var i = 0; i < HEADER_RESPONSES_.length; i += 1) {
+    if (String(row[i] || '') !== HEADER_RESPONSES_[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * 시트는 만들었지만 헤더 행을 빼먹은 경우를 잡는다. 그 상태에서도 sheetOk 는 true 라서
+ * 이걸 따로 확인하지 않으면: 첫 응답자의 제출이 1행(헤더 자리)에 실려 readRows_ 가
+ * 영원히 건너뛰고, 집계는 0을 가리키고, 그 사람은 재로그인 때 '신규'로 취급되어
+ * 다시 제출하면 같은 사번의 active 행이 둘 생긴다.
+ */
 function handlePing_() {
   var sheetOk = false;
+  var headerOk = false;
   try {
-    sheetOk = !!sheet_(SHEET_RESPONSES);
+    var sh = sheet_(SHEET_RESPONSES);
+    sheetOk = !!sh;
+    if (sh) {
+      var values = sh.getDataRange().getValues();
+      headerOk = headerRowOk_(values[0]);
+    }
   } catch (e) {
     sheetOk = false;
+    headerOk = false;
   }
-  return ok_({ pong: true, sheetOk: sheetOk, at: now_().toISOString() });
+  return ok_({ pong: true, sheetOk: sheetOk, headerOk: headerOk, at: now_().toISOString() });
 }

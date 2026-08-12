@@ -273,6 +273,51 @@ test('responses 시트가 없으면 sheetOk 가 false', () => {
   assert.equal(res.ok, true);
   assert.equal(res.data.sheetOk, false);
 });
+
+/*
+ * 운영자가 시트를 만들면서 헤더 행(README 1.3)을 빼먹으면: sheetOk 는 여전히 true,
+ * 첫 응답자의 제출이 1행(헤더 자리)에 실려 이후 조회에서 계속 안 보이고, 집계는 0을
+ * 가리키며, 그 사람은 재로그인 때 '신규'로 취급된다. 다시 제출하면 같은 사번의
+ * active 행이 둘이 되어 데이터 모델의 불변식이 깨진다. headerOk 는 이 사고를
+ * 아무도 응답을 넣기 전에 test.html 에서 잡기 위한 것이다.
+ */
+test('헤더 행이 정확하면 headerOk 가 true', () => {
+  const s = loadServer();
+  const res = s.call({ action: 'ping' });
+  assert.equal(res.ok, true);
+  assert.equal(res.data.headerOk, true);
+});
+
+test('헤더 행이 없거나 틀리면 headerOk 가 false', () => {
+  const s = loadServer();
+  s.sheets.responses.getRange(1, 1, 1, 12).setValues([[
+    'empNo', 'name', 'pickA', 'pickB', 'pw', 'salt',
+    'createdAt', 'updatedAt', 'updatedBy', 'status', 'failCount', 'lockedUntil',
+  ]]); // 5열이 'pwHash' 가 아니라 'pw' — 오타 하나로도 못 믿는 헤더가 된다
+  const res = s.call({ action: 'ping' });
+  assert.equal(res.ok, true);
+  assert.equal(res.data.sheetOk, true, '시트 자체는 있다');
+  assert.equal(res.data.headerOk, false);
+});
+
+test('헤더 행이 아예 비어 있으면(시트만 만들고 헤더를 안 넣은 경우) headerOk 가 false', () => {
+  const s = loadServer();
+  s.sheets.responses.getRange(1, 1, 1, 12).setValues([['', '', '', '', '', '', '', '', '', '', '', '']]);
+  const res = s.call({ action: 'ping' });
+  assert.equal(res.ok, true);
+  assert.equal(res.data.sheetOk, true);
+  assert.equal(res.data.headerOk, false);
+});
+
+test('responses 시트가 아예 없어도 ping 자체는 그대로 동작한다', () => {
+  const s = loadServer();
+  delete s.sheets.responses;
+  const res = s.call({ action: 'ping' });
+  assert.equal(res.ok, true);
+  assert.equal(res.data.pong, true);
+  assert.equal(res.data.sheetOk, false);
+  assert.equal(res.data.headerOk, false, '시트가 없으면 헤더도 확인할 수 없다');
+});
 ```
 
 - [ ] **Step 5: 테스트가 실패하는지 확인**
@@ -371,20 +416,51 @@ function handleRequest_(req) {
       default: return err_('SERVER_ERROR', '알 수 없는 요청입니다.');
     }
   } catch (e) {
+    // 사용자에게는 일반 문구만 보여주고, 상세(스택 포함)는 실행 로그에만 남긴다.
+    // 여기서 로그를 남기지 않으면 Apps Script 실행 로그는 이 실행을 "정상 종료"로
+    // 기록하므로, 예외가 catch 되는 순간 사고를 되짚을 단서가 어디에도 남지 않는다.
+    console.error('handleRequest_ 실패: ' + (e && e.stack ? e.stack : e));
     return err_('SERVER_ERROR', '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
   }
 }
 
 /** ===================== 진단 ===================== */
 
+/** responses 1행이 갖춰야 할 헤더. README 1.3, test.html 이 이 순서를 그대로 안내한다. */
+var HEADER_RESPONSES_ = [
+  'empNo', 'name', 'pickA', 'pickB', 'pwHash', 'salt',
+  'createdAt', 'updatedAt', 'updatedBy', 'status', 'failCount', 'lockedUntil',
+];
+
+function headerRowOk_(row) {
+  if (!row) return false;
+  for (var i = 0; i < HEADER_RESPONSES_.length; i += 1) {
+    if (String(row[i] || '') !== HEADER_RESPONSES_[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * 시트는 만들었지만 헤더 행을 빼먹은 경우를 잡는다. 그 상태에서도 sheetOk 는 true 라서
+ * 이걸 따로 확인하지 않으면: 첫 응답자의 제출이 1행(헤더 자리)에 실려 readRows_ 가
+ * 영원히 건너뛰고, 집계는 0을 가리키고, 그 사람은 재로그인 때 '신규'로 취급되어
+ * 다시 제출하면 같은 사번의 active 행이 둘 생긴다.
+ */
 function handlePing_() {
   var sheetOk = false;
+  var headerOk = false;
   try {
-    sheetOk = !!sheet_(SHEET_RESPONSES);
+    var sh = sheet_(SHEET_RESPONSES);
+    sheetOk = !!sh;
+    if (sh) {
+      var values = sh.getDataRange().getValues();
+      headerOk = headerRowOk_(values[0]);
+    }
   } catch (e) {
     sheetOk = false;
+    headerOk = false;
   }
-  return ok_({ pong: true, sheetOk: sheetOk, at: now_().toISOString() });
+  return ok_({ pong: true, sheetOk: sheetOk, headerOk: headerOk, at: now_().toISOString() });
 }
 ```
 
@@ -885,9 +961,15 @@ async function run() {
       redirect: 'follow',
     });
     const text = await res.text();
-    return { status: res.status, finalUrl: res.url, body: text.slice(0, 200) };
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch (e) { /* 프록시 차단 페이지가 200 으로 오는 경우가 있다 */ }
+    return { status: res.status, finalUrl: res.url, body: text.slice(0, 200), parsed };
   });
-  show('① fetch POST (text/plain)', a.okFlag && a.value.status === 200,
+  // HTTP 200 만으로는 안 된다 — 사내 프록시가 차단 페이지를 200으로 돌려주는 일이 흔하다.
+  // assets/api.js 도 JSON 파싱과 ok:true 를 요구한다. 여기서도 같은 기준이어야
+  // "① 로 정상 동작 가능"이라는 판정이 실제 화면의 동작과 일치한다.
+  const aWorks = a.okFlag && !!a.value.parsed && a.value.parsed.ok === true;
+  show('① fetch POST (text/plain)', aWorks,
        a.okFlag ? `${a.ms}ms · HTTP ${a.value.status} · ${a.value.body}` : `${a.ms}ms · ${a.error.message}`);
   if (a.okFlag) lines.push('    최종 URL: ' + a.value.finalUrl);
 
@@ -904,11 +986,20 @@ async function run() {
   show('③ script.googleusercontent.com 도달', c.okFlag,
        c.okFlag ? `${c.ms}ms` : `${c.ms}ms · ${c.error.message}`);
 
-  const sheetOk = (a.okFlag && /"sheetOk":true/.test(a.value.body))
-               || (b.okFlag && b.value && b.value.data && b.value.data.sheetOk === true);
+  const pingData = (aWorks && a.value.parsed.data)
+                 || (b.okFlag && b.value && b.value.ok === true && b.value.data)
+                 || null;
+
+  const sheetOk = pingData && pingData.sheetOk === true;
   show('④ 시트 접근', !!sheetOk, sheetOk ? '서버가 시트를 읽었습니다' : '확인 실패');
 
-  const verdict = a.okFlag && a.value.status === 200
+  // 시트는 만들었지만 1행 헤더를 빼먹은 경우를 여기서 잡는다 — sheetOk 는 true 인데도
+  // 첫 응답자의 제출이 헤더 자리에 실려 조용히 사라지는 사고가 실제로 있었다.
+  const headerOk = pingData && pingData.headerOk === true;
+  show('⑤ 헤더 행 확인', !!headerOk,
+       headerOk ? 'responses 1행 헤더가 올바릅니다' : '헤더가 없거나 철자·순서가 다릅니다 — README 1.3 확인');
+
+  const verdict = aWorks
     ? '판정: ① fetch 경로로 정상 동작 가능'
     : (b.okFlag ? '판정: ①은 막힘 → ② JSONP 경로로 동작 가능'
                 : '판정: ①② 모두 실패 — 화면을 Apps Script 로 옮기는 3차 안이 필요');
@@ -1068,8 +1159,8 @@ export const EMPNO_CASES = [
   { input: '1-234', expected: '01234', why: '하이픈' },
   { input: ' 01111 ', expected: '01111', why: '앞뒤 공백' },
   { input: '１２３', expected: '00123', why: '전각 숫자' },
-  { input: '99999', expected: '99999', why: '0으로 시작하지 않는 사번도 있다' },
-  { input: '88888', expected: '88888', why: '연수생 사번' },
+  { input: '99999', expected: '99999', why: '0으로 시작하지 않는 사번도 있을 수 있다' },
+  { input: '88888', expected: '88888', why: '연수생 같은 별도 대역의 사번도 있을 수 있다' },
   { input: '123456', expected: null,   why: '6자리는 오류' },
   { input: '',      expected: null,    why: '빈 값' },
   { input: '   ',   expected: null,    why: '공백뿐' },
@@ -1083,9 +1174,9 @@ export const NAME_CASES = [
   { input: '홍 길동',   expected: '홍길동', why: '가운데 공백' },
   { input: '  홍길동 ', expected: '홍길동', why: '앞뒤 공백' },
   { input: '홍　길동',  expected: '홍길동', why: '전각 공백' },
-  { input: '카림 유수프', expected: '카림유수프', why: '외국인 이름 — 띄어쓰기가 사람마다 갈린다' },
-  { input: '응우옌 티린', expected: '응우옌티린', why: '외국인 이름' },
-  { input: 'Kim Kitae', expected: 'KimKitae', why: '영문 표기' },
+  { input: '카림 유수프', expected: '카림유수프', why: '외국인 이름(가상) — 띄어쓰기가 사람마다 갈린다' },
+  { input: '응우옌 티린', expected: '응우옌티린', why: '외국인 이름(가상)' },
+  { input: 'Oh Jihun', expected: 'OhJihun', why: '영문 표기' },
   { input: '홍길동\t',  expected: '홍길동', why: '탭' },
   { input: '',          expected: null,    why: '빈 값' },
   { input: '   ',       expected: null,    why: '공백뿐' },
@@ -1186,11 +1277,15 @@ Expected: FAIL — `Cannot find module '../assets/normalize.js'`
 const FULLWIDTH_DIGITS = /[０-９]/g;
 const NON_DIGIT = /[^0-9]/g;
 // \s 는 U+3000 도 포함하지만, 제로폭 문자는 따로 지워야 한다.
-const WHITESPACE = /[\s　​-‍﻿]/g;
+const WHITESPACE = /[\s\u3000\u200B-\u200D\uFEFF]/g;
 
 export const EMPNO_LENGTH = 5;
 export const PW_LENGTH = 4;
 export const NAME_MAX = 20;
+
+// PW_LENGTH 를 실제로 쓴다 — 상수를 선언만 해두고 정작 규칙은 정규식에 4를 박아두면,
+// 둘 중 하나만 고치는 날 값이 어긋난다. Code.gs 도 같은 방식으로 PW_RE_ 를 쓴다.
+const PW_RE = new RegExp(`^[0-9]{${PW_LENGTH}}$`);
 
 function toHalfWidthDigits(s) {
   return s.replace(FULLWIDTH_DIGITS, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 0x30));
@@ -1216,7 +1311,7 @@ export function normalizeName(raw) {
 export function normalizePw(raw) {
   if (raw === null || raw === undefined) return null;
   const s = toHalfWidthDigits(String(raw)).replace(WHITESPACE, '');
-  if (!/^[0-9]{4}$/.test(s)) return null;
+  if (!PW_RE.test(s)) return null;
   return s;
 }
 ```
@@ -1234,7 +1329,8 @@ var EMPNO_LENGTH = 5;
 var PW_LENGTH = 4;
 var NAME_MAX = 20;
 
-var WS_RE_ = /[\s　​-‍﻿]/g;
+var WS_RE_ = /[\s\u3000\u200B-\u200D\uFEFF]/g;
+var PW_RE_ = new RegExp('^[0-9]{' + PW_LENGTH + '}$');
 
 function toHalfWidthDigits_(s) {
   return s.replace(/[０-９]/g, function (c) {
@@ -1260,7 +1356,7 @@ function normalizeName_(raw) {
 function normalizePw_(raw) {
   if (raw === null || raw === undefined) return null;
   var s = toHalfWidthDigits_(String(raw)).replace(WS_RE_, '');
-  if (!/^[0-9]{4}$/.test(s)) return null;
+  if (!PW_RE_.test(s)) return null;
   return s;
 }
 ```
@@ -2244,6 +2340,42 @@ test('정상 데이터에는 경고가 없다', () => {
   assert.deepEqual(s.call({ action: 'adminData', adminPw: 'adminpass' }).data.warnings, []);
 });
 
+test('이름이 constructor 여도 adminData 가 죽지 않는다', () => {
+  // byName/byEmp 를 {} 로 두면 이름이 'constructor' 인 사람이 들어왔을 때
+  // byName['constructor'] 가 상속된 Object.prototype.constructor 로 읽혀 truthy가 되고,
+  // 뒤이은 byName[n].indexOf(...) 가 함수를 배열처럼 다뤄 던진다. 그 예외가
+  // handleRequest_ 의 catch 까지 올라가 adminData 전체가 SERVER_ERROR 로 죽는다 —
+  // 통계·경고·명단·표 복사가 전부 막힌다.
+  const s = loadServer({
+    responses: [row('00001', 'constructor', true, true)],
+    properties: adminProps(),
+  });
+  const res = s.call({ action: 'adminData', adminPw: 'adminpass' });
+  assert.equal(res.ok, true, 'constructor 라는 이름 하나가 관리자 화면 전체를 죽이면 안 된다');
+  assert.equal(res.data.stats.total, 1);
+  assert.equal(res.data.stats.both, 1);
+  assert.deepEqual(res.data.warnings, []);
+});
+
+test('사번이 constructor 등 상속 프로퍼티 이름과 겹쳐도 adminData 가 죽지 않는다', () => {
+  // byEmp 도 같은 이유로 Object.create(null) 이어야 한다 — 같은 사번의 삭제분까지
+  // 훑는 SAME_EMPNO_DIFF_NAME 경고 집계가 empNo 를 키로 쓴다.
+  const s = loadServer({
+    responses: [
+      ['toString', '가', true, true, 'H', 'S',
+       '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', 'self', 'deleted', 0, ''],
+      ['toString', '나', false, true, 'H', 'S',
+       '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', 'self', 'active', 0, ''],
+    ],
+    properties: adminProps(),
+  });
+  const res = s.call({ action: 'adminData', adminPw: 'adminpass' });
+  assert.equal(res.ok, true);
+  const hit = res.data.warnings.find((w) => w.type === 'SAME_EMPNO_DIFF_NAME');
+  assert.ok(hit, '경고 자체는 여전히 잡아야 한다');
+  assert.equal(hit.empNo, 'toString');
+});
+
 /* ---------- 조작 ---------- */
 
 test('adminResetPw 는 비번을 비우고 잠금도 푼다', () => {
@@ -2356,6 +2488,41 @@ test('setupAdminPassword 가 해시와 솔트를 저장한다', () => {
   assert.ok(store.ADMIN_PW_HASH);
   assert.equal(/mypassword/.test(JSON.stringify(store)), false, '원문을 저장하면 안 된다');
 });
+
+/* ---------- 락 ---------- */
+
+// handleAdminData_/handleAdminResetPw_/handleAdminUpsert_/handleAdminDelete_ 모두
+// withLock_ 으로 감싸야 한다 — Code.gs 의 handleAdminData_ 위 주석이 그 이유를 설명한다:
+// 읽기처럼 보이는 adminData 도 requireAdmin_ 이 실패 카운터를 읽고 쓰므로, 락 없이는
+// 동시에 들어온 두 번의 오입력이 서로의 쓰기를 덮어써 5회 잠금이 걸리지 않는다.
+// withLock_ 을 빼도(그 주석이 하지 말라고 적어둔 바로 그 실수) 다른 96개 테스트는
+// 전부 그대로 통과했다 — 그래서 네 관리자 액션 각각이 BUSY 를 돌려주는지 직접 검증한다.
+test('adminData 도 락을 못 잡으면 BUSY', () => {
+  const s = loadServer({ responses: [row('00001', '가', true, true)], properties: adminProps(), lockFails: true });
+  const res = s.call({ action: 'adminData', adminPw: 'adminpass' });
+  assert.equal(res.error, 'BUSY');
+});
+
+test('adminResetPw 도 락을 못 잡으면 BUSY 이고 아무것도 바뀌지 않는다', () => {
+  const s = loadServer({ responses: [row('01234', '홍길동', true, false)], properties: adminProps(), lockFails: true });
+  const res = s.call({ action: 'adminResetPw', adminPw: 'adminpass', empNo: '01234' });
+  assert.equal(res.error, 'BUSY');
+  assert.equal(s.rows()[0][4], 'H', '비번 해시가 그대로여야 한다');
+});
+
+test('adminUpsert 도 락을 못 잡으면 BUSY 이고 새 행이 생기지 않는다', () => {
+  const s = loadServer({ properties: adminProps(), lockFails: true });
+  const res = s.call({ action: 'adminUpsert', adminPw: 'adminpass', empNo: '01234', name: '홍길동', pickA: true, pickB: true });
+  assert.equal(res.error, 'BUSY');
+  assert.equal(s.rows().length, 0);
+});
+
+test('adminDelete 도 락을 못 잡으면 BUSY 이고 status 가 그대로다', () => {
+  const s = loadServer({ responses: [row('01234', '홍길동', true, true)], properties: adminProps(), lockFails: true });
+  const res = s.call({ action: 'adminDelete', adminPw: 'adminpass', empNo: '01234' });
+  assert.equal(res.error, 'BUSY');
+  assert.equal(s.rows()[0][9], 'active');
+});
 ```
 
 - [ ] **Step 2: 테스트가 실패하는지 확인**
@@ -2452,7 +2619,12 @@ function computeStats_(rows) {
 function computeWarnings_(rows) {
   var warnings = [];
 
-  var byName = {};
+  // Object.create(null) 을 쓴다 — {} 는 Object.prototype 을 물려받아서, 이름이
+  // 'constructor'/'toString'/'hasOwnProperty'/'__proto__' 등이면 byName[n] 이
+  // 상속된 프로퍼티(함수 등)로 읽혀 truthy가 되고, 뒤이은 byName[n].indexOf(...) 가
+  // 함수를 배열처럼 다뤄 던진다. 그 예외는 handleRequest_ 의 catch 까지 올라가
+  // adminData 전체를 SERVER_ERROR 로 죽인다 — 실제로 있었던 버그다.
+  var byName = Object.create(null);
   var act = activeRows_(rows);
   for (var i = 0; i < act.length; i += 1) {
     var n = act[i].name;
@@ -2465,8 +2637,8 @@ function computeWarnings_(rows) {
     }
   }
 
-  // 같은 사번은 active 가 하나뿐이므로 삭제분까지 봐야 잡힌다.
-  var byEmp = {};
+  // 같은 사번은 active 가 하나뿐이므로 삭제분까지 봐야 잡힌다. 같은 이유로 Object.create(null).
+  var byEmp = Object.create(null);
   for (var j = 0; j < rows.length; j += 1) {
     var e = rows[j].empNo;
     if (!byEmp[e]) byEmp[e] = [];
@@ -2494,7 +2666,7 @@ function publicRow_(r) {
 
 /**
  * adminData 는 읽기 전용처럼 보이지만 requireAdmin_ 이 실패 카운터를 읽고 쓴다.
- * handleAuth_ 위 주석과 같은 이유(290행 부근)로, 락 없이는 동시에 들어온 두 번의
+ * handleAuth_ 위 주석과 같은 이유로, 락 없이는 동시에 들어온 두 번의
  * 오입력이 둘 다 같은 카운터 값을 읽고 같은 값을 써서 5회 잠금이 걸리지 않는다.
  * adminData 는 트래픽이 가장 많은 관리자 엔드포인트라 이 레이스가 가장 먼저 걸린다 —
  * "읽기니까 락이 필요 없다"고 다시 빼면 안 된다.
@@ -2677,7 +2849,6 @@ git commit -m "feat: 관리자 통계·경고·비번초기화·대리입력·�
 
     <label for="f-name">이름</label>
     <input id="f-name" type="text" autocomplete="off" placeholder="예: 홍길동">
-    <div class="hint" id="hint-name"></div>
 
     <label for="f-pw">비밀번호</label>
     <input id="f-pw" type="password" inputmode="numeric" autocomplete="off"
@@ -3372,10 +3543,10 @@ function fresh() {
 test('시나리오 1-2: 신규 가입 → 제출 → 재로그인 → 수정', () => {
   const s = fresh();
 
-  assert.equal(s.call({ action: 'auth', empNo: '2664', name: '김민준', pw: '1111' }).data.mode, 'new');
+  assert.equal(s.call({ action: 'auth', empNo: '1111', name: '김민준', pw: '1111' }).data.mode, 'new');
   assert.equal(s.rows().length, 0);
 
-  s.call({ action: 'save', empNo: '2664', name: '김민준', pw: '1111', pickA: true, pickB: true });
+  s.call({ action: 'save', empNo: '1111', name: '김민준', pw: '1111', pickA: true, pickB: true });
   assert.equal(s.rows().length, 1);
 
   const back = s.call({ action: 'auth', empNo: '01111', name: '김민준', pw: '1111' });
@@ -3390,7 +3561,7 @@ test('시나리오 1-2: 신규 가입 → 제출 → 재로그인 → 수정', (
 test('시나리오 3: 앞의 0을 뺀 사번은 같은 행으로 모인다', () => {
   const s = fresh();
   s.call({ action: 'save', empNo: '02222', name: '이서연', pw: '2222', pickA: true, pickB: false });
-  s.call({ action: 'save', empNo: '1629', name: '이서연', pw: '2222', pickA: false, pickB: true });
+  s.call({ action: 'save', empNo: '2222', name: '이서연', pw: '2222', pickA: false, pickB: true });
   assert.equal(s.rows().length, 1);
   assert.equal(s.call({ action: 'adminData', adminPw: ADMIN }).data.stats.total, 1);
 });
@@ -3439,7 +3610,7 @@ test('시나리오 7 · 12: 관리자 비밀번호 없이는 어떤 데이터도
 
 test('시나리오 8: 관리자 대리 입력 → 본인이 이어받아 수정', () => {
   const s = fresh();
-  s.call({ action: 'adminUpsert', adminPw: ADMIN, empNo: '3576', name: '한도경', pickA: true, pickB: false });
+  s.call({ action: 'adminUpsert', adminPw: ADMIN, empNo: '6666', name: '한도경', pickA: true, pickB: false });
   assert.equal(s.rows()[0][0], '06666');
   assert.equal(s.rows()[0][4], '', '비번은 비어 있다');
 
@@ -3500,6 +3671,11 @@ test('시나리오 13: 어떤 응답에도 pwHash·salt 가 없다', () => {
     s.call({ action: 'auth', empNo: '01111', name: '김민준', pw: '0000' }),
     s.call({ action: 'save', empNo: '01111', name: '김민준', pw: '1111', pickA: false, pickB: true }),
     s.call({ action: 'adminData', adminPw: ADMIN }),
+    // 세 관리자 조작 응답도 훑는다 — adminData 만 훑고 나머지 셋을 빼놓으면
+    // 이 응답들이 새로 pwHash/salt 를 실어 보내도 이 테스트가 못 잡는다.
+    s.call({ action: 'adminUpsert', adminPw: ADMIN, empNo: '01111', name: '김민준', pickA: true, pickB: true }),
+    s.call({ action: 'adminResetPw', adminPw: ADMIN, empNo: '01111' }),
+    s.call({ action: 'adminDelete', adminPw: ADMIN, empNo: '01111' }),
   ];
   for (const r of responses) {
     assert.equal(/pwHash|"salt"|admin-salt/.test(JSON.stringify(r)), false, JSON.stringify(r).slice(0, 120));
@@ -3521,6 +3697,23 @@ test('108명이 제출해도 집계 합계가 어긋나지 않는다', () => {
   assert.equal(st.a, st.both + st.onlyA);
   assert.equal(st.b, st.both + st.onlyB);
   assert.equal(s.rows().length, 108, '중복 행이 없어야 한다');
+
+  // 위 네 합계식은 버킷을 전부 고르게 잘못 세는 computeStats_ 라도 그대로 통과한다
+  // (예: 전부 both 로, 또는 전부 반씩 나눠 세도 식은 성립한다). i%3/i%4 패턴은 값이
+  // 고정돼 있으므로 버킷 하나하나를 직접 검증한다.
+  //
+  // pickA = i%3!==0 → 1..108 중 3의 배수(=false)는 108/3=36개, pickA=true 는 72개 → a=72
+  // pickB = i%4!==0 → 1..108 중 4의 배수(=false)는 108/4=27개, pickB=true 는 81개 → b=81
+  // none  = pickA=false ∧ pickB=false → 3과 4 모두의 배수, 즉 12의 배수 → 108/12=9개 → none=9
+  // onlyB = pickA=false ∧ pickB=true  → 3의 배수(36개) 중 12의 배수(9개)를 뺀 나머지 → 27개
+  // onlyA = pickA=true  ∧ pickB=false → 4의 배수(27개) 중 12의 배수(9개)를 뺀 나머지 → 18개
+  // both  = total − onlyA − onlyB − none = 108 − 18 − 27 − 9 = 54 (a=both+onlyA=72, b=both+onlyB=81 로 교차 검산)
+  assert.equal(st.a, 72);
+  assert.equal(st.b, 81);
+  assert.equal(st.none, 9);
+  assert.equal(st.onlyA, 18);
+  assert.equal(st.onlyB, 27);
+  assert.equal(st.both, 54);
 });
 ```
 

@@ -29,7 +29,7 @@ test('call() 이 돌려주는 중첩 객체를 host 객체 리터럴과 deepEqua
 
   assert.deepEqual(res, {
     ok: true,
-    data: { pong: true, sheetOk: true, at: '2026-08-12T09:00:00.000Z' },
+    data: { pong: true, sheetOk: true, headerOk: true, at: '2026-08-12T09:00:00.000Z' },
   });
 });
 

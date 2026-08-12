@@ -118,6 +118,42 @@ test('정상 데이터에는 경고가 없다', () => {
   assert.deepEqual(s.call({ action: 'adminData', adminPw: 'adminpass' }).data.warnings, []);
 });
 
+test('이름이 constructor 여도 adminData 가 죽지 않는다', () => {
+  // byName/byEmp 를 {} 로 두면 이름이 'constructor' 인 사람이 들어왔을 때
+  // byName['constructor'] 가 상속된 Object.prototype.constructor 로 읽혀 truthy가 되고,
+  // 뒤이은 byName[n].indexOf(...) 가 함수를 배열처럼 다뤄 던진다. 그 예외가
+  // handleRequest_ 의 catch 까지 올라가 adminData 전체가 SERVER_ERROR 로 죽는다 —
+  // 통계·경고·명단·표 복사가 전부 막힌다.
+  const s = loadServer({
+    responses: [row('00001', 'constructor', true, true)],
+    properties: adminProps(),
+  });
+  const res = s.call({ action: 'adminData', adminPw: 'adminpass' });
+  assert.equal(res.ok, true, 'constructor 라는 이름 하나가 관리자 화면 전체를 죽이면 안 된다');
+  assert.equal(res.data.stats.total, 1);
+  assert.equal(res.data.stats.both, 1);
+  assert.deepEqual(res.data.warnings, []);
+});
+
+test('사번이 constructor 등 상속 프로퍼티 이름과 겹쳐도 adminData 가 죽지 않는다', () => {
+  // byEmp 도 같은 이유로 Object.create(null) 이어야 한다 — 같은 사번의 삭제분까지
+  // 훑는 SAME_EMPNO_DIFF_NAME 경고 집계가 empNo 를 키로 쓴다.
+  const s = loadServer({
+    responses: [
+      ['toString', '가', true, true, 'H', 'S',
+       '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', 'self', 'deleted', 0, ''],
+      ['toString', '나', false, true, 'H', 'S',
+       '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', 'self', 'active', 0, ''],
+    ],
+    properties: adminProps(),
+  });
+  const res = s.call({ action: 'adminData', adminPw: 'adminpass' });
+  assert.equal(res.ok, true);
+  const hit = res.data.warnings.find((w) => w.type === 'SAME_EMPNO_DIFF_NAME');
+  assert.ok(hit, '경고 자체는 여전히 잡아야 한다');
+  assert.equal(hit.empNo, 'toString');
+});
+
 /* ---------- 조작 ---------- */
 
 test('adminResetPw 는 비번을 비우고 잠금도 푼다', () => {
@@ -229,4 +265,39 @@ test('setupAdminPassword 가 해시와 솔트를 저장한다', () => {
   assert.ok(store.ADMIN_SALT);
   assert.ok(store.ADMIN_PW_HASH);
   assert.equal(/mypassword/.test(JSON.stringify(store)), false, '원문을 저장하면 안 된다');
+});
+
+/* ---------- 락 ---------- */
+
+// handleAdminData_/handleAdminResetPw_/handleAdminUpsert_/handleAdminDelete_ 모두
+// withLock_ 으로 감싸야 한다 — Code.gs 의 handleAdminData_ 위 주석이 그 이유를 설명한다:
+// 읽기처럼 보이는 adminData 도 requireAdmin_ 이 실패 카운터를 읽고 쓰므로, 락 없이는
+// 동시에 들어온 두 번의 오입력이 서로의 쓰기를 덮어써 5회 잠금이 걸리지 않는다.
+// withLock_ 을 빼도(그 주석이 하지 말라고 적어둔 바로 그 실수) 다른 96개 테스트는
+// 전부 그대로 통과했다 — 그래서 네 관리자 액션 각각이 BUSY 를 돌려주는지 직접 검증한다.
+test('adminData 도 락을 못 잡으면 BUSY', () => {
+  const s = loadServer({ responses: [row('00001', '가', true, true)], properties: adminProps(), lockFails: true });
+  const res = s.call({ action: 'adminData', adminPw: 'adminpass' });
+  assert.equal(res.error, 'BUSY');
+});
+
+test('adminResetPw 도 락을 못 잡으면 BUSY 이고 아무것도 바뀌지 않는다', () => {
+  const s = loadServer({ responses: [row('01234', '홍길동', true, false)], properties: adminProps(), lockFails: true });
+  const res = s.call({ action: 'adminResetPw', adminPw: 'adminpass', empNo: '01234' });
+  assert.equal(res.error, 'BUSY');
+  assert.equal(s.rows()[0][4], 'H', '비번 해시가 그대로여야 한다');
+});
+
+test('adminUpsert 도 락을 못 잡으면 BUSY 이고 새 행이 생기지 않는다', () => {
+  const s = loadServer({ properties: adminProps(), lockFails: true });
+  const res = s.call({ action: 'adminUpsert', adminPw: 'adminpass', empNo: '01234', name: '홍길동', pickA: true, pickB: true });
+  assert.equal(res.error, 'BUSY');
+  assert.equal(s.rows().length, 0);
+});
+
+test('adminDelete 도 락을 못 잡으면 BUSY 이고 status 가 그대로다', () => {
+  const s = loadServer({ responses: [row('01234', '홍길동', true, true)], properties: adminProps(), lockFails: true });
+  const res = s.call({ action: 'adminDelete', adminPw: 'adminpass', empNo: '01234' });
+  assert.equal(res.error, 'BUSY');
+  assert.equal(s.rows()[0][9], 'active');
 });

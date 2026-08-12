@@ -14,10 +14,10 @@ function fresh() {
 test('시나리오 1-2: 신규 가입 → 제출 → 재로그인 → 수정', () => {
   const s = fresh();
 
-  assert.equal(s.call({ action: 'auth', empNo: '2664', name: '김민준', pw: '1111' }).data.mode, 'new');
+  assert.equal(s.call({ action: 'auth', empNo: '1111', name: '김민준', pw: '1111' }).data.mode, 'new');
   assert.equal(s.rows().length, 0);
 
-  s.call({ action: 'save', empNo: '2664', name: '김민준', pw: '1111', pickA: true, pickB: true });
+  s.call({ action: 'save', empNo: '1111', name: '김민준', pw: '1111', pickA: true, pickB: true });
   assert.equal(s.rows().length, 1);
 
   const back = s.call({ action: 'auth', empNo: '01111', name: '김민준', pw: '1111' });
@@ -32,7 +32,7 @@ test('시나리오 1-2: 신규 가입 → 제출 → 재로그인 → 수정', (
 test('시나리오 3: 앞의 0을 뺀 사번은 같은 행으로 모인다', () => {
   const s = fresh();
   s.call({ action: 'save', empNo: '02222', name: '이서연', pw: '2222', pickA: true, pickB: false });
-  s.call({ action: 'save', empNo: '1629', name: '이서연', pw: '2222', pickA: false, pickB: true });
+  s.call({ action: 'save', empNo: '2222', name: '이서연', pw: '2222', pickA: false, pickB: true });
   assert.equal(s.rows().length, 1);
   assert.equal(s.call({ action: 'adminData', adminPw: ADMIN }).data.stats.total, 1);
 });
@@ -81,7 +81,7 @@ test('시나리오 7 · 12: 관리자 비밀번호 없이는 어떤 데이터도
 
 test('시나리오 8: 관리자 대리 입력 → 본인이 이어받아 수정', () => {
   const s = fresh();
-  s.call({ action: 'adminUpsert', adminPw: ADMIN, empNo: '3576', name: '한도경', pickA: true, pickB: false });
+  s.call({ action: 'adminUpsert', adminPw: ADMIN, empNo: '6666', name: '한도경', pickA: true, pickB: false });
   assert.equal(s.rows()[0][0], '06666');
   assert.equal(s.rows()[0][4], '', '비번은 비어 있다');
 
@@ -142,6 +142,11 @@ test('시나리오 13: 어떤 응답에도 pwHash·salt 가 없다', () => {
     s.call({ action: 'auth', empNo: '01111', name: '김민준', pw: '0000' }),
     s.call({ action: 'save', empNo: '01111', name: '김민준', pw: '1111', pickA: false, pickB: true }),
     s.call({ action: 'adminData', adminPw: ADMIN }),
+    // 세 관리자 조작 응답도 훑는다 — adminData 만 훑고 나머지 셋을 빼놓으면
+    // 이 응답들이 새로 pwHash/salt 를 실어 보내도 이 테스트가 못 잡는다.
+    s.call({ action: 'adminUpsert', adminPw: ADMIN, empNo: '01111', name: '김민준', pickA: true, pickB: true }),
+    s.call({ action: 'adminResetPw', adminPw: ADMIN, empNo: '01111' }),
+    s.call({ action: 'adminDelete', adminPw: ADMIN, empNo: '01111' }),
   ];
   for (const r of responses) {
     assert.equal(/pwHash|"salt"|admin-salt/.test(JSON.stringify(r)), false, JSON.stringify(r).slice(0, 120));
@@ -163,4 +168,21 @@ test('108명이 제출해도 집계 합계가 어긋나지 않는다', () => {
   assert.equal(st.a, st.both + st.onlyA);
   assert.equal(st.b, st.both + st.onlyB);
   assert.equal(s.rows().length, 108, '중복 행이 없어야 한다');
+
+  // 위 네 합계식은 버킷을 전부 고르게 잘못 세는 computeStats_ 라도 그대로 통과한다
+  // (예: 전부 both 로, 또는 전부 반씩 나눠 세도 식은 성립한다). i%3/i%4 패턴은 값이
+  // 고정돼 있으므로 버킷 하나하나를 직접 검증한다.
+  //
+  // pickA = i%3!==0 → 1..108 중 3의 배수(=false)는 108/3=36개, pickA=true 는 72개 → a=72
+  // pickB = i%4!==0 → 1..108 중 4의 배수(=false)는 108/4=27개, pickB=true 는 81개 → b=81
+  // none  = pickA=false ∧ pickB=false → 3과 4 모두의 배수, 즉 12의 배수 → 108/12=9개 → none=9
+  // onlyB = pickA=false ∧ pickB=true  → 3의 배수(36개) 중 12의 배수(9개)를 뺀 나머지 → 27개
+  // onlyA = pickA=true  ∧ pickB=false → 4의 배수(27개) 중 12의 배수(9개)를 뺀 나머지 → 18개
+  // both  = total − onlyA − onlyB − none = 108 − 18 − 27 − 9 = 54 (a=both+onlyA=72, b=both+onlyB=81 로 교차 검산)
+  assert.equal(st.a, 72);
+  assert.equal(st.b, 81);
+  assert.equal(st.none, 9);
+  assert.equal(st.onlyA, 18);
+  assert.equal(st.onlyB, 27);
+  assert.equal(st.both, 54);
 });

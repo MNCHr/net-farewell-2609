@@ -1,2 +1,9 @@
+# 참고: GitHub Pages 프로젝트 사이트(https://<계정>.github.io/<저장소>/)에서는
+# 크롤러가 robots.txt 를 사용자 사이트 루트(https://<계정>.github.io/robots.txt)에서
+# 찾는다. 이 파일은 그 경로에 있지 않으므로 실제로는 아무 크롤러도 읽지 않는다.
+# 검색엔진 노출을 막는 실질적인 방어는 index.html/admin.html/test.html 의
+# <meta name="robots" content="noindex,nofollow"> 뿐이다 — 지우지 말 것.
+# 이 파일은 혹시 나중에 사용자 사이트(<계정>.github.io)로 옮겨 배포하게 되면 그때는
+# 실제로 동작하므로, 해가 없어 그대로 남겨둔다.
 User-agent: *
 Disallow: /

@@ -7,12 +7,20 @@
 
 const FULLWIDTH_DIGITS = /[０-９]/g;
 const NON_DIGIT = /[^0-9]/g;
-// \s 는 U+3000 도 포함하지만, 제로폭 문자는 따로 지워야 한다.
-const WHITESPACE = /[\s　​-‍﻿]/g;
+// \s 는 U+3000(전각 공백)도 포함하지만, 제로폭 문자는 따로 지워야 한다.
+// 눈에 안 보이는 문자를 소스에 원문자 그대로 박아두지 않는다 — 이 파일을 편집기 사이로
+// 옮겨적다가 한 글자만 빠져도(U+FEFF 가 실제로 두 번 그렇게 사라진 적이 있다) 살아남은
+// 글자들이 뒤집힌 범위(reversed range)가 되어 SyntaxError 로 깨진다. 전부 \uXXXX 로 적는다.
+// U+200B-U+200D 는 제로폭 공백·비접합자·접합자 세 글자를 범위 하나로 묶은 것이다.
+const WHITESPACE = /[\s\u3000\u200B-\u200D\uFEFF]/g;
 
 export const EMPNO_LENGTH = 5;
 export const PW_LENGTH = 4;
 export const NAME_MAX = 20;
+
+// PW_LENGTH 를 실제로 쓴다 — 상수를 선언만 해두고 정작 규칙은 정규식에 4를 박아두면,
+// 둘 중 하나만 고치는 날 값이 어긋난다. Code.gs 도 같은 방식으로 PW_RE_ 를 쓴다.
+const PW_RE = new RegExp(`^[0-9]{${PW_LENGTH}}$`);
 
 function toHalfWidthDigits(s) {
   return s.replace(FULLWIDTH_DIGITS, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 0x30));
@@ -38,6 +46,6 @@ export function normalizeName(raw) {
 export function normalizePw(raw) {
   if (raw === null || raw === undefined) return null;
   const s = toHalfWidthDigits(String(raw)).replace(WHITESPACE, '');
-  if (!/^[0-9]{4}$/.test(s)) return null;
+  if (!PW_RE.test(s)) return null;
   return s;
 }

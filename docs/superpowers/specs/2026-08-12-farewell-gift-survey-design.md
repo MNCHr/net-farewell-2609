@@ -236,8 +236,10 @@ export const RETIREE_B = { key: 'B', label: '이OO 책임님' };
 
 ### `ping` — 진단 전용
 
-요청: `{ action: "ping" }`. 인증 없이 `{ ok:true, data:{ pong:true, sheetOk:true, at:"..." } }`를 돌려준다.
-`sheetOk`는 시트 접근이 실제로 되는지 확인한 결과이며, `responses`의 내용은 읽지도 쓰지도 않는다.
+요청: `{ action: "ping" }`. 인증 없이
+`{ ok:true, data:{ pong:true, sheetOk:true, headerOk:true, at:"..." } }`를 돌려준다.
+`sheetOk`는 시트 접근이 실제로 되는지, `headerOk`는 `responses` 1행이 정해진 헤더와
+정확히 일치하는지 확인한 결과다. 둘 다 `responses`의 데이터 행은 읽지도 쓰지도 않는다.
 `test.html`에서만 사용한다.
 
 ### 참여자용
@@ -385,7 +387,13 @@ export const RETIREE_B = { key: 'B', label: '이OO 책임님' };
 GitHub Pages 사이트는 저장소를 비공개로 돌려도 **사이트 자체는 항상 공개**다.
 소스만 숨겨질 뿐이며 이는 우회할 수 없다. 따라서 다음으로 대응한다.
 
-- `robots.txt`와 `<meta name="robots" content="noindex,nofollow">` — 검색엔진 색인 차단. 가장 중요
+- `<meta name="robots" content="noindex,nofollow">` — 검색엔진 색인 차단. 가장 중요.
+  **`robots.txt`는 이 저장소에 두어도 실제로는 동작하지 않는다** — GitHub Pages
+  프로젝트 사이트(`https://<계정>.github.io/<저장소>/`)에서 크롤러는 `robots.txt`를
+  사용자 사이트 루트(`https://<계정>.github.io/robots.txt`)에서 찾지, 저장소 안에서
+  찾지 않는다. 그래서 색인 차단은 전적으로 각 HTML의 `<meta>` 태그에 달려 있다.
+  `robots.txt`는 해가 없고 사용자 사이트로 옮겨 배포하면 그때는 실제로 동작하므로
+  남겨두되, 노출 대응책으로 세지 않는다
 - 퇴직자 표기는 `김OO 책임님` 형태 — 사내 인원은 알아보지만 외부인에겐 의미 없는 문자열
 - 응답 데이터는 비공개 구글시트에 있으므로 사이트에서 새지 않는다
 - 외부인의 장난 제출은 관리자 화면에서 삭제한다
@@ -439,10 +447,15 @@ Apps Script는 `OPTIONS` 요청에 응답할 수 없다. 따라서 **preflight�
 
 `test.html`이 검사하는 것:
 
-1. `fetch` POST (text/plain) 왕복 성공 여부와 소요 시간
+1. `fetch` POST (text/plain) 왕복 성공 여부와 소요 시간. HTTP 200 만으로는 성공으로 치지
+   않는다 — 사내 프록시가 차단 페이지를 200으로 돌려주는 일이 흔하므로, 본문이 JSON으로
+   파싱되고 `ok:true`인지까지 확인한다 (`assets/api.js`가 실제로 요구하는 것과 같은 기준)
 2. JSONP GET 왕복 성공 여부와 소요 시간
 3. `script.googleusercontent.com` 도달 여부
 4. 시트 읽기/쓰기 왕복 (진단 전용 `ping` 액션. `responses`를 건드리지 않는다)
+5. `responses` 1행 헤더가 올바른지(`headerOk`). 시트는 만들었지만 헤더 행을 빼먹으면
+   `sheetOk`는 그대로 true 라서, 이 검사가 없으면 첫 응답자의 제출이 헤더 자리에 실려
+   조용히 사라지는 사고를 아무도 방문 전에는 알아채지 못한다
 
 각 항목의 성공/실패와 **실패 시 에러 원문**을 화면에 표시하고,
 `[결과 전체 복사]`로 진단 결과를 클립보드에 담는다.
