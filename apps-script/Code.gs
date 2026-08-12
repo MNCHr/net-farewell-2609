@@ -365,6 +365,224 @@ function handleSave_(req) {
   });
 }
 
+/** ===================== 관리자 ===================== */
+
+var P_ADMIN_HASH = 'ADMIN_PW_HASH';
+var P_ADMIN_SALT = 'ADMIN_SALT';
+var P_ADMIN_FAIL = 'ADMIN_FAIL_COUNT';
+var P_ADMIN_LOCK = 'ADMIN_LOCKED_UNTIL';
+
+/**
+ * ▶ 편집기에서 한 번만 실행하는 셋업 함수.
+ *   아래 'CHANGE_ME' 를 실제 관리자 비밀번호로 바꾸고 실행한 뒤,
+ *   다시 'CHANGE_ME' 로 되돌려 저장할 것. (4자리 제한 없음. 길수록 좋다.)
+ */
+function setupAdminPassword() {
+  setAdminPassword_('CHANGE_ME');
+}
+
+function setAdminPassword_(pw) {
+  var props = PropertiesService.getScriptProperties();
+  var salt = newSalt_();
+  props.setProperty(P_ADMIN_SALT, salt);
+  props.setProperty(P_ADMIN_HASH, hashPw_(salt, String(pw)));
+  props.setProperty(P_ADMIN_FAIL, '0');
+  props.deleteProperty(P_ADMIN_LOCK);
+}
+
+function requireAdmin_(req) {
+  var props = PropertiesService.getScriptProperties();
+  var hash = props.getProperty(P_ADMIN_HASH);
+  var salt = props.getProperty(P_ADMIN_SALT);
+  if (!hash || !salt) {
+    return err_('ADMIN_DENIED', '관리자 비밀번호가 설정되어 있지 않습니다.');
+  }
+
+  var lockedUntil = props.getProperty(P_ADMIN_LOCK);
+  if (lockedUntil && now_().getTime() < new Date(lockedUntil).getTime()) {
+    return err_('LOCKED', '관리자 로그인이 일시적으로 잠겼습니다.', { lockedUntil: lockedUntil });
+  }
+  if (lockedUntil) {
+    props.setProperty(P_ADMIN_FAIL, '0');
+    props.deleteProperty(P_ADMIN_LOCK);
+  }
+
+  if (hashPw_(salt, String(req.adminPw == null ? '' : req.adminPw)) !== hash) {
+    var fail = Number(props.getProperty(P_ADMIN_FAIL) || 0) + 1;
+    props.setProperty(P_ADMIN_FAIL, String(fail));
+    if (fail >= MAX_FAIL) {
+      props.setProperty(P_ADMIN_LOCK,
+        new Date(now_().getTime() + LOCK_MINUTES * 60000).toISOString());
+    }
+    return err_('ADMIN_DENIED', '관리자 비밀번호는 일치하지 않습니다.');
+  }
+
+  props.setProperty(P_ADMIN_FAIL, '0');
+  return null;
+}
+
+function activeRows_(rows) {
+  var out = [];
+  for (var i = 0; i < rows.length; i += 1) {
+    if (rows[i].status === 'active') out.push(rows[i]);
+  }
+  return out;
+}
+
+function computeStats_(rows) {
+  var st = { total: 0, a: 0, b: 0, both: 0, onlyA: 0, onlyB: 0, none: 0 };
+  var act = activeRows_(rows);
+  for (var i = 0; i < act.length; i += 1) {
+    var r = act[i];
+    st.total += 1;
+    if (r.pickA) st.a += 1;
+    if (r.pickB) st.b += 1;
+    if (r.pickA && r.pickB) st.both += 1;
+    else if (r.pickA) st.onlyA += 1;
+    else if (r.pickB) st.onlyB += 1;
+    else st.none += 1;
+  }
+  return st;
+}
+
+/** 자유 입력 방식의 대가인 오타를 관리자 눈에 먼저 띄게 한다. */
+function computeWarnings_(rows) {
+  var warnings = [];
+
+  var byName = {};
+  var act = activeRows_(rows);
+  for (var i = 0; i < act.length; i += 1) {
+    var n = act[i].name;
+    if (!byName[n]) byName[n] = [];
+    if (byName[n].indexOf(act[i].empNo) < 0) byName[n].push(act[i].empNo);
+  }
+  for (var name in byName) {
+    if (byName[name].length > 1) {
+      warnings.push({ type: 'SAME_NAME_DIFF_EMPNO', name: name, empNos: byName[name] });
+    }
+  }
+
+  // 같은 사번은 active 가 하나뿐이므로 삭제분까지 봐야 잡힌다.
+  var byEmp = {};
+  for (var j = 0; j < rows.length; j += 1) {
+    var e = rows[j].empNo;
+    if (!byEmp[e]) byEmp[e] = [];
+    if (byEmp[e].indexOf(rows[j].name) < 0) byEmp[e].push(rows[j].name);
+  }
+  for (var emp in byEmp) {
+    if (byEmp[emp].length > 1) {
+      warnings.push({ type: 'SAME_EMPNO_DIFF_NAME', empNo: emp, names: byEmp[emp] });
+    }
+  }
+
+  return warnings;
+}
+
+function publicRow_(r) {
+  return {
+    empNo: r.empNo, name: r.name,
+    pickA: !!r.pickA, pickB: !!r.pickB,
+    createdAt: r.createdAt, updatedAt: r.updatedAt,
+    updatedBy: r.updatedBy, status: r.status,
+    hasPw: !!r.pwHash,          // 해시 자체는 절대 내보내지 않는다
+    locked: !!(r.lockedUntil && now_().getTime() < new Date(r.lockedUntil).getTime()),
+  };
+}
+
+function handleAdminData_(req) {
+  var denied = requireAdmin_(req);
+  if (denied) return denied;
+
+  var rows = readRows_();
+  var act = activeRows_(rows);
+  var out = [];
+  for (var i = 0; i < act.length; i += 1) out.push(publicRow_(act[i]));
+  out.sort(function (x, y) { return x.empNo < y.empNo ? -1 : (x.empNo > y.empNo ? 1 : 0); });
+
+  return ok_({
+    stats: computeStats_(rows),
+    rows: out,
+    warnings: computeWarnings_(rows),
+  });
+}
+
+function handleAdminResetPw_(req) {
+  return withLock_(function () {
+    var denied = requireAdmin_(req);
+    if (denied) return denied;
+
+    var empNo = normalizeEmpNo_(req.empNo);
+    if (!empNo) return err_('BAD_EMPNO', '사번은 숫자 5자리입니다.');
+
+    var row = findByEmpNo_(readRows_(), empNo);
+    if (!row) return err_('NOT_FOUND', '해당 사번의 응답이 없습니다.');
+
+    row.pwHash = '';
+    row.salt = '';
+    row.failCount = 0;
+    row.lockedUntil = '';
+    writeRow_(row);
+    writeLog_('admin_reset_pw', empNo, 'admin', '');
+
+    return ok_({ empNo: empNo });
+  });
+}
+
+function handleAdminUpsert_(req) {
+  return withLock_(function () {
+    var denied = requireAdmin_(req);
+    if (denied) return denied;
+
+    var empNo = normalizeEmpNo_(req.empNo);
+    if (!empNo) return err_('BAD_EMPNO', '사번은 숫자 5자리입니다.');
+    var name = normalizeName_(req.name);
+    if (!name) return err_('BAD_NAME', '이름을 입력해주세요.');
+
+    var rows = readRows_();
+    var row = findByEmpNo_(rows, empNo);
+    var isNew = false;
+    if (!row) {
+      var buried = findAnyByEmpNo_(rows, empNo);
+      if (buried.length > 0) { row = buried[0]; row.status = 'active'; }
+      else { row = blankRow_(empNo, name); isNew = true; }
+    }
+
+    row.name = name;
+    row.pickA = boolOf_(req.pickA);
+    row.pickB = boolOf_(req.pickB);
+    row.updatedAt = now_().toISOString();
+    row.updatedBy = 'admin';
+    // pwHash 는 건드리지 않는다. 신규면 빈 값이라 본인이 나중에 이어받는다.
+
+    if (row.rowIndex) writeRow_(row); else appendRow_(row);
+    writeLog_('admin_upsert', empNo, 'admin',
+      (isNew ? 'new ' : 'edit ') + 'A=' + row.pickA + ' B=' + row.pickB);
+
+    return ok_({ empNo: empNo, created: isNew });
+  });
+}
+
+function handleAdminDelete_(req) {
+  return withLock_(function () {
+    var denied = requireAdmin_(req);
+    if (denied) return denied;
+
+    var empNo = normalizeEmpNo_(req.empNo);
+    if (!empNo) return err_('BAD_EMPNO', '사번은 숫자 5자리입니다.');
+
+    var row = findByEmpNo_(readRows_(), empNo);
+    if (!row) return err_('NOT_FOUND', '해당 사번의 응답이 없습니다.');
+
+    row.status = 'deleted';
+    row.updatedAt = now_().toISOString();
+    row.updatedBy = 'admin';
+    writeRow_(row);
+    writeLog_('admin_delete', empNo, 'admin', '');
+
+    return ok_({ empNo: empNo });
+  });
+}
+
 /** ===================== 진입점 ===================== */
 
 function doPost(e) {
@@ -406,6 +624,10 @@ function handleRequest_(req) {
       case 'ping': return handlePing_();
       case 'auth': return handleAuth_(req);
       case 'save': return handleSave_(req);
+      case 'adminData': return handleAdminData_(req);
+      case 'adminResetPw': return handleAdminResetPw_(req);
+      case 'adminUpsert': return handleAdminUpsert_(req);
+      case 'adminDelete': return handleAdminDelete_(req);
       default: return err_('SERVER_ERROR', '알 수 없는 요청입니다.');
     }
   } catch (e) {
