@@ -48,11 +48,13 @@ test('빈 시트의 통계는 전부 0', () => {
 /* ---------- 권한 ---------- */
 
 test('관리자 비밀번호가 틀리면 데이터를 한 조각도 주지 않는다', () => {
-  const s = loadServer({ responses: [row('00001', '가', true, true)], properties: adminProps() });
+  // 이름은 한 글자짜리('가')를 쓰지 않는다. 흔한 음절이라 오류 문구의 조사
+  // ('비밀번호가')와 겹쳐서, 데이터가 안 샜는데도 샌 것처럼 잡힌다.
+  const s = loadServer({ responses: [row('00001', '홍길동', true, true)], properties: adminProps() });
   const res = s.call({ action: 'adminData', adminPw: '틀림' });
   assert.equal(res.ok, false);
   assert.equal(res.error, 'ADMIN_DENIED');
-  assert.equal(/00001|가/.test(JSON.stringify(res)), false);
+  assert.equal(/00001|홍길동/.test(JSON.stringify(res)), false);
 });
 
 test('관리자 비밀번호가 설정돼 있지 않으면 거부한다', () => {

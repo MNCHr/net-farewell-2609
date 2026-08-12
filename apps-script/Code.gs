@@ -414,7 +414,7 @@ function requireAdmin_(req) {
       props.setProperty(P_ADMIN_LOCK,
         new Date(now_().getTime() + LOCK_MINUTES * 60000).toISOString());
     }
-    return err_('ADMIN_DENIED', '관리자 비밀번호는 일치하지 않습니다.');
+    return err_('ADMIN_DENIED', '관리자 비밀번호가 일치하지 않습니다.');
   }
 
   props.setProperty(P_ADMIN_FAIL, '0');
