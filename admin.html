@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>관리자</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap wide">
+
+  <section class="card" id="gate">
+    <h1>관리자</h1>
+    <p class="sub">관리자 비밀번호를 입력해주세요.</p>
+    <input id="admin-pw" type="password" autocomplete="off" placeholder="관리자 비밀번호">
+    <div id="gate-err" class="err" hidden></div>
+    <button id="btn-enter">들어가기</button>
+  </section>
+
+  <div id="panel" hidden>
+    <section class="card">
+      <h1>집계</h1>
+      <div class="stat-row" id="stats"></div>
+      <h2>선택 분포</h2>
+      <div class="stat-row" id="dist"></div>
+      <button id="btn-refresh" class="ghost">새로고침</button>
+    </section>
+
+    <section class="card" id="warn-card" hidden>
+      <h1>확인이 필요한 항목</h1>
+      <div id="warnings"></div>
+    </section>
+
+    <section class="card">
+      <h1>응답 명단</h1>
+      <div id="list-err" class="err" hidden></div>
+      <div class="scroll"><table id="rows"></table></div>
+      <button id="btn-copy" class="ghost">표 복사</button>
+      <p class="muted" id="copied" hidden>클립보드에 담았습니다. 엑셀에 붙여넣으세요.</p>
+    </section>
+
+    <section class="card">
+      <h1>대리 입력 · 수정</h1>
+      <p class="sub">사이트를 못 쓰는 분을 대신 넣거나, 사번 오타로 잠긴 분을 구제할 때 씁니다.</p>
+      <label for="u-empno">사번</label>
+      <input id="u-empno" type="tel" inputmode="numeric" maxlength="7" placeholder="예: 1234">
+      <label for="u-name">이름</label>
+      <input id="u-name" type="text" placeholder="예: 홍길동">
+      <div id="u-picks"></div>
+      <div id="u-err" class="err" hidden></div>
+      <button id="btn-upsert">저장</button>
+      <p class="muted">비밀번호는 설정하지 않습니다. 본인이 나중에 직접 로그인할 때 정하게 됩니다.</p>
+    </section>
+  </div>
+
+</div>
+<script type="module" src="assets/admin.js"></script>
+</body>
+</html>
