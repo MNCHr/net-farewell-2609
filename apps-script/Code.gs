@@ -80,6 +80,132 @@ function sheet_(name) {
   return SpreadsheetApp.getActive().getSheetByName(name);
 }
 
+/** ===================== 저장소 ===================== */
+
+function boolOf_(v) {
+  return v === true || v === 'TRUE' || v === 'true' || v === 1;
+}
+
+function rowFromValues_(values, rowIndex) {
+  return {
+    rowIndex: rowIndex,
+    empNo: normalizeEmpNo_(values[COL.EMPNO - 1]) || String(values[COL.EMPNO - 1] || ''),
+    name: String(values[COL.NAME - 1] || ''),
+    pickA: boolOf_(values[COL.PICK_A - 1]),
+    pickB: boolOf_(values[COL.PICK_B - 1]),
+    pwHash: String(values[COL.PW_HASH - 1] || ''),
+    salt: String(values[COL.SALT - 1] || ''),
+    createdAt: String(values[COL.CREATED - 1] || ''),
+    updatedAt: String(values[COL.UPDATED - 1] || ''),
+    updatedBy: String(values[COL.UPDATED_BY - 1] || ''),
+    status: String(values[COL.STATUS - 1] || 'active'),
+    failCount: Number(values[COL.FAIL - 1] || 0),
+    lockedUntil: String(values[COL.LOCKED - 1] || ''),
+  };
+}
+
+function valuesFromRow_(row) {
+  var v = [];
+  v[COL.EMPNO - 1] = row.empNo;
+  v[COL.NAME - 1] = row.name;
+  v[COL.PICK_A - 1] = !!row.pickA;
+  v[COL.PICK_B - 1] = !!row.pickB;
+  v[COL.PW_HASH - 1] = row.pwHash || '';
+  v[COL.SALT - 1] = row.salt || '';
+  v[COL.CREATED - 1] = row.createdAt || '';
+  v[COL.UPDATED - 1] = row.updatedAt || '';
+  v[COL.UPDATED_BY - 1] = row.updatedBy || '';
+  v[COL.STATUS - 1] = row.status || 'active';
+  v[COL.FAIL - 1] = Number(row.failCount || 0);
+  v[COL.LOCKED - 1] = row.lockedUntil || '';
+  return v;
+}
+
+function readRows_() {
+  var sh = sheet_(SHEET_RESPONSES);
+  if (!sh) return [];
+  var values = sh.getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < values.length; i += 1) {          // 0행은 헤더
+    if (!values[i] || String(values[i][COL.EMPNO - 1] || '') === '') continue;
+    out.push(rowFromValues_(values[i], i + 1));          // 시트는 1-based
+  }
+  return out;
+}
+
+function findByEmpNo_(rows, empNo) {
+  for (var i = 0; i < rows.length; i += 1) {
+    if (rows[i].empNo === empNo && rows[i].status === 'active') return rows[i];
+  }
+  return null;
+}
+
+function findAnyByEmpNo_(rows, empNo) {
+  var out = [];
+  for (var i = 0; i < rows.length; i += 1) {
+    if (rows[i].empNo === empNo) out.push(rows[i]);
+  }
+  return out;
+}
+
+function blankRow_(empNo, name) {
+  var iso = now_().toISOString();
+  return {
+    rowIndex: 0, empNo: empNo, name: name,
+    pickA: false, pickB: false, pwHash: '', salt: '',
+    createdAt: iso, updatedAt: iso, updatedBy: 'self',
+    status: 'active', failCount: 0, lockedUntil: '',
+  };
+}
+
+function appendRow_(row) {
+  var sh = sheet_(SHEET_RESPONSES);
+  sh.appendRow(valuesFromRow_(row));
+  row.rowIndex = sh.getLastRow();
+  return row;
+}
+
+function writeRow_(row) {
+  var sh = sheet_(SHEET_RESPONSES);
+  sh.getRange(row.rowIndex, 1, 1, NCOLS).setValues([valuesFromRow_(row)]);
+  return row;
+}
+
+function writeLog_(action, empNo, actor, detail) {
+  var sh = sheet_(SHEET_LOG);
+  if (!sh) return;
+  sh.appendRow([now_().toISOString(), action, empNo, actor, detail || '']);
+}
+
+/** 시트 읽기-수정-쓰기 사이에 다른 요청이 끼어들면 행이 덮어써진다. */
+function withLock_(fn) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(LOCK_WAIT_MS)) {
+    return err_('BUSY', '접속이 몰리고 있습니다. 잠시 후 다시 시도해주세요.');
+  }
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** ===================== 해시 ===================== */
+
+function sha256Base64_(s) {
+  var bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256, String(s), Utilities.Charset.UTF_8);
+  return Utilities.base64Encode(bytes);
+}
+
+function newSalt_() {
+  return Utilities.getUuid();
+}
+
+function hashPw_(salt, pw) {
+  return sha256Base64_(String(salt) + '|' + String(pw));
+}
+
 /** ===================== 진입점 ===================== */
 
 function doPost(e) {
