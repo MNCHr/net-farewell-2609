@@ -1184,7 +1184,7 @@ Expected: FAIL — `Cannot find module '../assets/normalize.js'`
 const FULLWIDTH_DIGITS = /[０-９]/g;
 const NON_DIGIT = /[^0-9]/g;
 // \s 는 U+3000 도 포함하지만, 제로폭 문자는 따로 지워야 한다.
-const WHITESPACE = /[\s　​-‍]/g;
+const WHITESPACE = /[\s　​-‍﻿]/g;
 
 export const EMPNO_LENGTH = 5;
 export const PW_LENGTH = 4;
@@ -1232,7 +1232,7 @@ var EMPNO_LENGTH = 5;
 var PW_LENGTH = 4;
 var NAME_MAX = 20;
 
-var WS_RE_ = /[\s　​-‍]/g;
+var WS_RE_ = /[\s　​-‍﻿]/g;
 
 function toHalfWidthDigits_(s) {
   return s.replace(/[０-９]/g, function (c) {
