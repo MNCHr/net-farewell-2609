@@ -489,20 +489,29 @@ function publicRow_(r) {
   };
 }
 
+/**
+ * adminData 는 읽기 전용처럼 보이지만 requireAdmin_ 이 실패 카운터를 읽고 쓴다.
+ * handleAuth_ 위 주석과 같은 이유(290행 부근)로, 락 없이는 동시에 들어온 두 번의
+ * 오입력이 둘 다 같은 카운터 값을 읽고 같은 값을 써서 5회 잠금이 걸리지 않는다.
+ * adminData 는 트래픽이 가장 많은 관리자 엔드포인트라 이 레이스가 가장 먼저 걸린다 —
+ * "읽기니까 락이 필요 없다"고 다시 빼면 안 된다.
+ */
 function handleAdminData_(req) {
-  var denied = requireAdmin_(req);
-  if (denied) return denied;
+  return withLock_(function () {
+    var denied = requireAdmin_(req);
+    if (denied) return denied;
 
-  var rows = readRows_();
-  var act = activeRows_(rows);
-  var out = [];
-  for (var i = 0; i < act.length; i += 1) out.push(publicRow_(act[i]));
-  out.sort(function (x, y) { return x.empNo < y.empNo ? -1 : (x.empNo > y.empNo ? 1 : 0); });
+    var rows = readRows_();
+    var act = activeRows_(rows);
+    var out = [];
+    for (var i = 0; i < act.length; i += 1) out.push(publicRow_(act[i]));
+    out.sort(function (x, y) { return x.empNo < y.empNo ? -1 : (x.empNo > y.empNo ? 1 : 0); });
 
-  return ok_({
-    stats: computeStats_(rows),
-    rows: out,
-    warnings: computeWarnings_(rows),
+    return ok_({
+      stats: computeStats_(rows),
+      rows: out,
+      warnings: computeWarnings_(rows),
+    });
   });
 }
 
@@ -543,8 +552,16 @@ function handleAdminUpsert_(req) {
     var isNew = false;
     if (!row) {
       var buried = findAnyByEmpNo_(rows, empNo);
-      if (buried.length > 0) { row = buried[0]; row.status = 'active'; }
-      else { row = blankRow_(empNo, name); isNew = true; }
+      if (buried.length > 0) {
+        row = buried[0];
+        row.status = 'active';
+        // 삭제되기 전의 잠금은 이 사람 탓이 아니다 — 되살리면서 함께 푼다.
+        row.failCount = 0;
+        row.lockedUntil = '';
+      } else {
+        row = blankRow_(empNo, name);
+        isNew = true;
+      }
     }
 
     row.name = name;

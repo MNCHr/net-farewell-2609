@@ -169,6 +169,36 @@ test('adminUpsert 는 있으면 갱신한다', () => {
   assert.equal(s.rows()[0][4], 'H', '기존 비밀번호는 보존한다');
 });
 
+test('adminUpsert 는 삭제된 행을 되살릴 때 비밀번호는 지키고 잠금은 푼다', () => {
+  const salt = 'revive-salt';
+  const pwHash = loadServer().fn.hashPw_(salt, '1234');
+  const s = loadServer({
+    responses: [['01234', '홍길동', true, false, pwHash, salt,
+                 '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', 'self',
+                 'deleted', 5, '2026-08-12T09:30:00.000Z']],
+    properties: adminProps(),
+  });
+
+  const res = s.call({
+    action: 'adminUpsert', adminPw: 'adminpass',
+    empNo: '01234', name: '홍길동', pickA: false, pickB: true,
+  });
+  assert.equal(res.ok, true);
+
+  assert.equal(s.rows().length, 1, '중복 행이 생기면 안 된다');
+  assert.equal(s.rows()[0][9], 'active', 'status 가 되살아나야 한다');
+  assert.equal(s.rows()[0][4], pwHash, '비밀번호 해시는 손대지 않는다 — 대리 입력이 아니라 복구다');
+  assert.equal(s.rows()[0][5], salt, '솔트도 그대로 보존된다');
+  assert.equal(s.rows()[0][8], 'admin', 'updatedBy 는 admin 이어야 한다');
+  assert.equal(s.rows()[0][10], 0, '삭제 전의 잠금 카운터가 남아 있으면 안 된다');
+  assert.equal(s.rows()[0][11], '', '삭제 전의 잠금 시각도 남아 있으면 안 된다');
+
+  // 원래 비밀번호로 바로 인증되어야 한다 — 잠겨 있던 채로 되살아나면 안 된다.
+  const auth = s.call({ action: 'auth', empNo: '01234', name: '홍길동', pw: '1234' });
+  assert.equal(auth.ok, true);
+  assert.equal(auth.data.mode, 'existing', '되살린 뒤에도 원래 비밀번호를 알던 사람이다');
+});
+
 test('adminDelete 는 행을 지우지 않고 status 만 바꾼다', () => {
   const s = loadServer({ responses: [row('01234', '홍길동', true, true)], properties: adminProps() });
   const res = s.call({ action: 'adminDelete', adminPw: 'adminpass', empNo: '01234' });

@@ -2293,6 +2293,36 @@ test('adminUpsert 는 있으면 갱신한다', () => {
   assert.equal(s.rows()[0][4], 'H', '기존 비밀번호는 보존한다');
 });
 
+test('adminUpsert 는 삭제된 행을 되살릴 때 비밀번호는 지키고 잠금은 푼다', () => {
+  const salt = 'revive-salt';
+  const pwHash = loadServer().fn.hashPw_(salt, '1234');
+  const s = loadServer({
+    responses: [['01234', '홍길동', true, false, pwHash, salt,
+                 '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', 'self',
+                 'deleted', 5, '2026-08-12T09:30:00.000Z']],
+    properties: adminProps(),
+  });
+
+  const res = s.call({
+    action: 'adminUpsert', adminPw: 'adminpass',
+    empNo: '01234', name: '홍길동', pickA: false, pickB: true,
+  });
+  assert.equal(res.ok, true);
+
+  assert.equal(s.rows().length, 1, '중복 행이 생기면 안 된다');
+  assert.equal(s.rows()[0][9], 'active', 'status 가 되살아나야 한다');
+  assert.equal(s.rows()[0][4], pwHash, '비밀번호 해시는 손대지 않는다 — 대리 입력이 아니라 복구다');
+  assert.equal(s.rows()[0][5], salt, '솔트도 그대로 보존된다');
+  assert.equal(s.rows()[0][8], 'admin', 'updatedBy 는 admin 이어야 한다');
+  assert.equal(s.rows()[0][10], 0, '삭제 전의 잠금 카운터가 남아 있으면 안 된다');
+  assert.equal(s.rows()[0][11], '', '삭제 전의 잠금 시각도 남아 있으면 안 된다');
+
+  // 원래 비밀번호로 바로 인증되어야 한다 — 잠겨 있던 채로 되살아나면 안 된다.
+  const auth = s.call({ action: 'auth', empNo: '01234', name: '홍길동', pw: '1234' });
+  assert.equal(auth.ok, true);
+  assert.equal(auth.data.mode, 'existing', '되살린 뒤에도 원래 비밀번호를 알던 사람이다');
+});
+
 test('adminDelete 는 행을 지우지 않고 status 만 바꾼다', () => {
   const s = loadServer({ responses: [row('01234', '홍길동', true, true)], properties: adminProps() });
   const res = s.call({ action: 'adminDelete', adminPw: 'adminpass', empNo: '01234' });
@@ -2460,20 +2490,29 @@ function publicRow_(r) {
   };
 }
 
+/**
+ * adminData 는 읽기 전용처럼 보이지만 requireAdmin_ 이 실패 카운터를 읽고 쓴다.
+ * handleAuth_ 위 주석과 같은 이유(290행 부근)로, 락 없이는 동시에 들어온 두 번의
+ * 오입력이 둘 다 같은 카운터 값을 읽고 같은 값을 써서 5회 잠금이 걸리지 않는다.
+ * adminData 는 트래픽이 가장 많은 관리자 엔드포인트라 이 레이스가 가장 먼저 걸린다 —
+ * "읽기니까 락이 필요 없다"고 다시 빼면 안 된다.
+ */
 function handleAdminData_(req) {
-  var denied = requireAdmin_(req);
-  if (denied) return denied;
+  return withLock_(function () {
+    var denied = requireAdmin_(req);
+    if (denied) return denied;
 
-  var rows = readRows_();
-  var act = activeRows_(rows);
-  var out = [];
-  for (var i = 0; i < act.length; i += 1) out.push(publicRow_(act[i]));
-  out.sort(function (x, y) { return x.empNo < y.empNo ? -1 : (x.empNo > y.empNo ? 1 : 0); });
+    var rows = readRows_();
+    var act = activeRows_(rows);
+    var out = [];
+    for (var i = 0; i < act.length; i += 1) out.push(publicRow_(act[i]));
+    out.sort(function (x, y) { return x.empNo < y.empNo ? -1 : (x.empNo > y.empNo ? 1 : 0); });
 
-  return ok_({
-    stats: computeStats_(rows),
-    rows: out,
-    warnings: computeWarnings_(rows),
+    return ok_({
+      stats: computeStats_(rows),
+      rows: out,
+      warnings: computeWarnings_(rows),
+    });
   });
 }
 
@@ -2514,8 +2553,16 @@ function handleAdminUpsert_(req) {
     var isNew = false;
     if (!row) {
       var buried = findAnyByEmpNo_(rows, empNo);
-      if (buried.length > 0) { row = buried[0]; row.status = 'active'; }
-      else { row = blankRow_(empNo, name); isNew = true; }
+      if (buried.length > 0) {
+        row = buried[0];
+        row.status = 'active';
+        // 삭제되기 전의 잠금은 이 사람 탓이 아니다 — 되살리면서 함께 푼다.
+        row.failCount = 0;
+        row.lockedUntil = '';
+      } else {
+        row = blankRow_(empNo, name);
+        isNew = true;
+      }
     }
 
     row.name = name;
