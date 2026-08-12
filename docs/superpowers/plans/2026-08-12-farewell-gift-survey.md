@@ -3461,6 +3461,8 @@ test('시나리오 9: 비번 초기화 → 새 비번으로 재진입', () => {
     '옛 비번도 새 비번도 아무거나 통한다 — 미설정 상태이므로');
   s.call({ action: 'save', empNo: '07777', name: '서지민', pw: '8888', pickA: true, pickB: true });
   assert.equal(s.call({ action: 'auth', empNo: '07777', name: '서지민', pw: '8888' }).data.mode, 'existing');
+  assert.equal(s.call({ action: 'auth', empNo: '07777', name: '서지민', pw: '7777' }).error, 'WRONG_PW',
+    '새 비번을 정한 뒤에는 초기화 전 비번이 되살아나면 안 된다');
 });
 
 test('시나리오 10-11: 삭제는 집계에서만 빠지고, 재가입하면 되살아난다', () => {
@@ -3475,6 +3477,17 @@ test('시나리오 10-11: 삭제는 집계에서만 빠지고, 재가입하면 �
   s.call({ action: 'save', empNo: '08888', name: '배윤아', pw: '1010', pickA: false, pickB: true });
   assert.equal(s.rows().length, 1, '새 행이 생기면 안 된다');
   assert.equal(s.call({ action: 'adminData', adminPw: ADMIN }).data.stats.total, 1);
+
+  // 여기서 멈추면 안 된다. 위의 두 줄은 되살리기가 비밀번호를 버려도 그대로 통과한다
+  // (행 수도 1, 집계도 1이므로). 실제로 그 버그가 있었고, 본인이 다음 로그인에서
+  // WRONG_PW 로 막히다 5회 잠금까지 갔다. 되살아난 뒤 '새로 낸 비밀번호로 실제로
+  // 들어가지는지'를 물어야만 그 버그가 잡힌다.
+  assert.equal(
+    s.call({ action: 'auth', empNo: '08888', name: '배윤아', pw: '1010' }).data.mode,
+    'existing', '재가입할 때 낸 비밀번호로 들어갈 수 있어야 한다');
+  assert.equal(
+    s.call({ action: 'auth', empNo: '08888', name: '배윤아', pw: '9999' }).error,
+    'WRONG_PW', '삭제 전 비밀번호는 더 이상 통하지 않아야 한다');
 });
 
 test('시나리오 13: 어떤 응답에도 pwHash·salt 가 없다', () => {
