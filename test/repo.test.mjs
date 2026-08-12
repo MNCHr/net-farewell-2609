@@ -20,10 +20,12 @@ test('readRows_ 는 헤더를 건너뛰고 1-based rowIndex 를 붙인다', () =
 
 test('빈 시트에서 readRows_ 는 빈 배열', () => {
   const s = loadServer();
-  // readRows_ 는 vm 샌드박스 안에서 실행되므로 반환된 배열은 host Realm 의 Array 와
-  // 다른 realm 소속이다. assert/strict 의 deepEqual 은 realm 이 다르면 내용이 같아도
-  // reference 불일치로 실패하므로, host 배열로 복사한 뒤 비교한다.
-  assert.deepEqual([...s.fn.readRows_()], []);
+  // s.fn.readRows_() 는 하네스의 call()/rows()/logRows() 경계를 거치지 않고 sandbox 함수를
+  // 직접 호출한다 (fn 은 의도적으로 hostify 하지 않는다 — load-code-gs.mjs 참고). 그래서
+  // 돌려받는 배열은 여전히 sandbox realm 이고, host `[]` 리터럴과 deepEqual 로 비교하면
+  // 내용이 같아도 realm 불일치로 실패한다. 여기서는 "비어 있는가"만 확인하면 되므로
+  // realm 이 없는 원시값(length)을 비교해 그 문제를 피한다.
+  assert.equal(s.fn.readRows_().length, 0);
 });
 
 test('시트에 숫자로 저장된 사번도 정규화해서 읽는다', () => {
@@ -79,9 +81,7 @@ test('writeLog_ 는 log 시트에 한 줄 남긴다', () => {
   s.fn.writeLog_('create', '00042', 'self', 'picks=A');
   const logs = s.logRows();
   assert.equal(logs.length, 1);
-  // logs[0] 은 sandbox realm 의 배열이라 host 배열 literal 과 realm 이 다르다.
-  // (readRows_ 테스트와 같은 이유로 host 배열로 복사한 뒤 비교한다.)
-  assert.deepEqual([...logs[0]], ['2026-08-12T09:00:00.000Z', 'create', '00042', 'self', 'picks=A']);
+  assert.deepEqual(logs[0], ['2026-08-12T09:00:00.000Z', 'create', '00042', 'self', 'picks=A']);
 });
 
 test('해시는 솔트가 다르면 달라지고 같으면 재현된다', () => {
