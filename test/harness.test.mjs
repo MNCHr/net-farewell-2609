@@ -49,6 +49,18 @@ test('hostify 는 원시값·null·undefined·boolean 을 그대로 돌려준다
   assert.equal(hostify(sym), sym);
 });
 
+test('hostify 는 Date 를 host realm Date 로 복제한다', () => {
+  // Code.gs 는 모든 시각을 now_().toISOString() 으로 문자열화해 내보내므로 이 분기는
+  // 지금은 실제 경계에서 안 쓰인다. 그래도 Code.gs 가 Date 를 그대로 돌려주도록 바뀌는
+  // 날 조용히 깨지지 않게 여기서 붙잡아둔다.
+  const original = new Date('2026-08-12T09:00:00.000Z');
+  const copy = hostify(original);
+  assert.ok(copy instanceof Date, 'host realm 의 Date 여야 한다');
+  assert.notEqual(copy, original, '원본을 그대로 돌려주면 안 된다');
+  assert.equal(copy.getTime(), original.getTime());
+  assert.deepEqual(hostify({ at: original }), { at: new Date('2026-08-12T09:00:00.000Z') });
+});
+
 test('hostify 는 순환 참조가 있어도 무한루프에 빠지지 않는다', () => {
   const cyclic = { name: 'a' };
   cyclic.self = cyclic;
