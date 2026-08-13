@@ -25,6 +25,10 @@ const emailInput = $('f-email');
 const hintEmail = $('hint-email');
 const HINT_IDLE = `@${EMAIL_DOMAIN} 은 빼고 아이디만 쓰셔도 됩니다.`;
 
+// index.html 에는 도메인을 하드코딩하지 않는다 — EMAIL_DOMAIN(config.js) 이 유일한 출처다.
+emailInput.placeholder = `예: hong  (또는 hong@${EMAIL_DOMAIN})`;
+hintEmail.textContent = HINT_IDLE;
+
 emailInput.addEventListener('input', () => {
   const raw = emailInput.value;
   if (raw.trim() === '') {

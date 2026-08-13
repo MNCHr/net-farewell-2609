@@ -124,7 +124,8 @@ async function runChecks() {
   // 첫 응답자의 제출이 헤더 자리에 실려 조용히 사라지는 사고가 실제로 있었다.
   const headerOk = pingData && pingData.headerOk === true;
   show('⑤ 헤더 행 확인', !!headerOk,
-       headerOk ? 'responses 1행 헤더가 올바릅니다' : '헤더가 없거나 철자·순서가 다릅니다 — README 1.3 확인');
+       headerOk ? 'responses 1행 헤더가 올바릅니다'
+                : '헤더가 다르거나, Apps Script 를 새 버전으로 배포하지 않았습니다. 시트가 맞다면 재배포를 다시 확인하세요.');
 
   const verdict = aWorks
     ? '판정: ① fetch 경로로 정상 동작 가능'

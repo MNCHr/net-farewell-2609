@@ -34,7 +34,7 @@ test('조합형 한글은 NFC 로 모여 완성형과 같아진다', () => {
 });
 
 test('두 구현이 같은 입력에 같은 답을 낸다', () => {
-  const inputs = ['1234', '01234', '１２３', 'abc', '', '999999', ' 7 ', '99999'];
+  const inputs = ['1234', 'hong.gildong', '１２３', 'abc', '', '999999', ' 7 ', 'abc@etri.re.kr'];
   for (const raw of inputs) {
     assert.equal(normalizeName(raw), server.normalizeName_(raw), `이름 ${JSON.stringify(raw)}`);
     assert.equal(normalizePw(raw), server.normalizePw_(raw), `비번 ${JSON.stringify(raw)}`);

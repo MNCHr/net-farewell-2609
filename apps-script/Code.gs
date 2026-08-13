@@ -282,7 +282,7 @@ function verifyCredentials_(req) {
   if (!row) return { row: null, mode: 'new', email: email, name: name, pw: pw };
 
   if (row.name !== name) {
-    return err_('NAME_MISMATCH', '이메일과 이름이 일치하지 않습니다. 다시 확인해주세요.');
+    return err_('NAME_MISMATCH', '이메일과 이름이 일치하지 않습니다. 다시 확인해주시고, 계속 안 되면 담당자에게 문의해주세요.');
   }
 
   var locked = checkLock_(row);
@@ -482,15 +482,15 @@ function computeWarnings_(rows) {
   }
 
   // 같은 이메일은 active 가 하나뿐이므로 삭제분까지 봐야 잡힌다. 같은 이유로 Object.create(null).
-  var byEmp = Object.create(null);
+  var byEmail = Object.create(null);
   for (var j = 0; j < rows.length; j += 1) {
     var e = rows[j].email;
-    if (!byEmp[e]) byEmp[e] = [];
-    if (byEmp[e].indexOf(rows[j].name) < 0) byEmp[e].push(rows[j].name);
+    if (!byEmail[e]) byEmail[e] = [];
+    if (byEmail[e].indexOf(rows[j].name) < 0) byEmail[e].push(rows[j].name);
   }
-  for (var emp in byEmp) {
-    if (byEmp[emp].length > 1) {
-      warnings.push({ type: 'SAME_EMAIL_DIFF_NAME', email: emp, names: byEmp[emp] });
+  for (var em in byEmail) {
+    if (byEmail[em].length > 1) {
+      warnings.push({ type: 'SAME_EMAIL_DIFF_NAME', email: em, names: byEmail[em] });
     }
   }
 

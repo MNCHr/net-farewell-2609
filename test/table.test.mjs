@@ -55,3 +55,9 @@ test('updatedAt 이 비어도 죽지 않는다', () => {
   const rows = [{ email: 'x@etri.re.kr', name: '마바', pickA: true, pickB: false, updatedAt: '' }];
   assert.equal(buildTable(rows, RETIREES, null).split('\n')[1].split('\t')[4], '');
 });
+
+test('알 수 없는 퇴직자 키는 던진다', () => {
+  // pick() 의 명시적 검사를 못 박아둔다 — else 로 뭉뚱그리면 퇴직자가 셋이 되는 날
+  // C 필터가 조용히 B 명단을 내놓는다.
+  assert.throws(() => buildTable(ROWS, RETIREES, 'C'));
+});

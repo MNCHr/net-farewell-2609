@@ -92,8 +92,6 @@ function statTile(value, label) {
 }
 
 function render(data) {
-  lastRows = data.rows;
-
   const stats = $('stats');
   stats.innerHTML = '';
   stats.append(statTile(data.stats.total, '전체 응답'));
@@ -109,6 +107,9 @@ function render(data) {
 
   renderWarnings(data.warnings);
   renderRows(data.rows);
+  // lastRows 는 refreshCopyButtons() 바로 앞에서만 갱신한다 — 둘을 떼어놓으면, 그 사이에서
+  // 예외가 나는 경우 lastRows 는 새 데이터인데 복사 버튼 라벨은 이전 인원수로 남는다.
+  lastRows = data.rows;
   refreshCopyButtons();
 }
 
@@ -306,11 +307,24 @@ async function toClipboard(text) {
   }
 }
 
+/** filterKey 가 RETIREES 에 없는 키면(설정/COPY_BUTTONS 어긋남) 여기서 바로 알 수 있게 던진다
+ *  — assets/table.js 의 pick() 과 같은 이유다. 그냥 두면 r.label 에서 이유를 알 수 없는
+ *  TypeError 로 죽어 관리자 화면 전체가 하얗게 빈다. */
+function retireeByKey(key) {
+  const r = RETIREES.find((x) => x.key === key);
+  if (!r) throw new Error('알 수 없는 퇴직자 키: ' + key);
+  return r;
+}
+
 function copyLabel(filterKey) {
   const n = countFor(lastRows, filterKey);
   if (!filterKey) return `전체 표 복사 (${n})`;
-  const r = RETIREES.find((x) => x.key === filterKey);
-  return `${r.label} 참여자 표 (${n})`;
+  return `${retireeByKey(filterKey).label} 참여자 표 (${n})`;
+}
+
+function copiedMessage(filterKey) {
+  if (!filterKey) return '전체 표를 클립보드에 담았습니다. 엑셀에 붙여넣으세요.';
+  return `${retireeByKey(filterKey).label} 참여자 표를 클립보드에 담았습니다. 엑셀에 붙여넣으세요.`;
 }
 
 function refreshCopyButtons() {
@@ -326,7 +340,11 @@ for (const b of COPY_BUTTONS) {
   $(b.id).addEventListener('click', async () => {
     if (stale) return;
     if (countFor(lastRows, b.filterKey) === 0) return;
+    // 먼저 감춘다 — 이전 클릭 때 이미 떠 있었다면, 이번 클릭이 같은 문구를 다시 띄우는 것만으로는
+    // 화면이 안 바뀌어서 "눌렸다"는 티가 안 난다.
+    $('copied').hidden = true;
     await toClipboard(buildTable(lastRows, RETIREES, b.filterKey));
+    $('copied').textContent = copiedMessage(b.filterKey);
     $('copied').hidden = false;
   });
 }
