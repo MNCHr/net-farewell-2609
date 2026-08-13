@@ -1,6 +1,7 @@
 # 퇴임 선물 참여 조사
 
-[설계 문서](docs/superpowers/specs/2026-08-12-farewell-gift-survey-design.md) · [구현 계획](docs/superpowers/plans/2026-08-12-farewell-gift-survey.md)
+[설계 문서](docs/superpowers/specs/2026-08-12-farewell-gift-survey-design.md) · [구현 계획](docs/superpowers/plans/2026-08-12-farewell-gift-survey.md) ·
+[이메일 신원 변경 설계](docs/superpowers/specs/2026-08-13-email-identity-change-design.md)
 
 ## ⚠️ 개인정보
 
@@ -24,10 +25,10 @@
 1. 새 스프레드시트를 만든다
 2. 시트 이름을 `responses` 로 바꾸고, 시트를 하나 더 추가해 `log` 로 이름 짓는다
 3. `responses` 1행에 헤더를 넣는다:
-   `empNo  name  pickA  pickB  pwHash  salt  createdAt  updatedAt  updatedBy  status  failCount  lockedUntil`
-4. `log` 1행에 헤더를 넣는다: `at  action  empNo  actor  detail`
-5. **`responses` A열 전체를 선택 → 서식 → 숫자 → 일반 텍스트**
-   (이걸 빼면 사번 `01234` 가 `1234` 로 바뀐다)
+   `email  name  pickA  pickB  pwHash  salt  createdAt  updatedAt  updatedBy  status  failCount  lockedUntil`
+4. `log` 1행에 헤더를 넣는다: `at  action  email  actor  detail`
+
+> 사번을 쓰던 시절 필요했던 A열 텍스트 서식 지정은 더 이상 필요 없습니다.
 
 ### 2. Apps Script
 
@@ -71,6 +72,34 @@
 3. commit & push
 4. **사내망 PC**에서 `https://<계정>.github.io/<저장소>/test.html` 을 연다
 5. `[결과 전체 복사]` 를 눌러 진단 결과를 담당자에게 전달한다
+
+## 관리자 화면
+
+`admin.html`은 어디에도 링크되어 있지 않다 (일부러 그렇다). 주소창에 직접 입력해서 연다:
+
+```
+https://<계정>.github.io/<저장소>/admin.html
+```
+
+여기서 할 수 있는 일:
+
+- 집계 보기, 오타 의심 항목(`SAME_NAME_DIFF_EMAIL` 등) 확인
+- 비밀번호 초기화, 대리 입력
+- 응답 삭제 — 시트에서 행을 지우는 게 아니라 `status`만 바꾸므로 되돌릴 수 있다
+- **전체 표 복사** / **퇴직자별 표 복사** — 각 퇴직자에게 마음을 보탠 사람들에게 메일을 보낼 때
+  쓴다. 엑셀에 붙여넣고 이메일 열만 긁으면 된다
+
+## 이미 배포한 뒤 코드를 고쳤다면
+
+순서를 지켜야 한다. 2번을 빠뜨리면 화면은 새 것인데 서버가 옛 것이라 모든 요청이 실패한다.
+
+1. **구글시트** — 헤더나 열의 뜻이 바뀌었으면 먼저 고친다
+2. **Apps Script** — `apps-script/Code.gs` 를 다시 붙여넣고
+   **배포 → 배포 관리 → 편집(연필) → 버전: 새 버전 → 배포**
+   (저장만 해서는 `/exec` 주소의 내용이 바뀌지 않는다)
+3. **GitHub** — `git push` (Pages 가 몇 분 안에 갱신된다)
+4. **확인** — `test.html` 을 열어 `headerOk` 가 OK 인지 본다. 1번을 빠뜨렸으면 여기서 잡힌다
+   (브라우저가 옛 파일을 캐시하고 있으면 `Ctrl+Shift+R`)
 
 ## 로컬 개발
 
