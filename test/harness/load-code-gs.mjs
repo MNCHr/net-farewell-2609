@@ -65,10 +65,10 @@ export function hostify(value, seen = new WeakMap()) {
 }
 
 export const HEADER_RESPONSES = [
-  'empNo', 'name', 'pickA', 'pickB', 'pwHash', 'salt',
+  'email', 'name', 'pickA', 'pickB', 'pwHash', 'salt',
   'createdAt', 'updatedAt', 'updatedBy', 'status', 'failCount', 'lockedUntil',
 ];
-export const HEADER_LOG = ['at', 'action', 'empNo', 'actor', 'detail'];
+export const HEADER_LOG = ['at', 'action', 'email', 'actor', 'detail'];
 
 export function loadServer({
   responses = [],

@@ -1,25 +1,6 @@
 // 브라우저 구현과 서버 구현을 모두 이 표로 검증한다.
 // 규칙이 바뀌면 여기부터 고친다.
 
-export const EMPNO_CASES = [
-  { input: '01234', expected: '01234', why: '그대로' },
-  { input: '1234',  expected: '01234', why: '앞의 0을 빼고 입력 — 실제 명단 대부분이 0으로 시작한다' },
-  { input: '123',   expected: '00123', why: '0 두 개 생략' },
-  { input: '1',     expected: '00001', why: '한 자리' },
-  { input: '1 2 3 4', expected: '01234', why: '띄어쓰기' },
-  { input: '1-234', expected: '01234', why: '하이픈' },
-  { input: ' 01111 ', expected: '01111', why: '앞뒤 공백' },
-  { input: '１２３', expected: '00123', why: '전각 숫자' },
-  { input: '99999', expected: '99999', why: '0으로 시작하지 않는 사번도 있을 수 있다' },
-  { input: '88888', expected: '88888', why: '연수생 같은 별도 대역의 사번도 있을 수 있다' },
-  { input: '123456', expected: null,   why: '6자리는 오류' },
-  { input: '',      expected: null,    why: '빈 값' },
-  { input: '   ',   expected: null,    why: '공백뿐' },
-  { input: 'abcde', expected: null,    why: '숫자가 하나도 없음' },
-  { input: null,    expected: null,    why: 'null' },
-  { input: undefined, expected: null,  why: 'undefined' },
-];
-
 export const NAME_CASES = [
   { input: '홍길동',    expected: '홍길동', why: '그대로' },
   { input: '홍 길동',   expected: '홍길동', why: '가운데 공백' },

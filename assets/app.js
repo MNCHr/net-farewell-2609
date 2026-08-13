@@ -1,6 +1,6 @@
 import { EXEC_URL, RETIREES, ORG_LABEL } from './config.js';
 import { createApi } from './api.js';
-import { normalizeEmpNo, normalizeName, normalizePw } from './normalize.js';
+import { normalizeEmail, normalizeName, normalizePw } from './normalize.js';
 
 const api = createApi({ execUrl: EXEC_URL });
 const $ = (id) => document.getElementById(id);
@@ -12,7 +12,7 @@ function show(id) {
 }
 
 /** 이 세 값이 화면 전체의 상태다. */
-const session = { empNo: '', name: '', pw: '', picks: { A: false, B: false } };
+const session = { email: '', name: '', pw: '', picks: { A: false, B: false } };
 
 /* ---------- 1단계 ---------- */
 $('intro-sub').textContent =
@@ -31,7 +31,7 @@ empnoInput.addEventListener('input', () => {
     hintEmpno.textContent = '5자리입니다. 앞의 0은 빼고 쓰셔도 됩니다.';
     return;
   }
-  const norm = normalizeEmpNo(raw);
+  const norm = normalizeEmail(raw);
   if (norm) {
     hintEmpno.className = 'hint ok';
     hintEmpno.textContent = `사번 ${norm} 으로 조회합니다`;
@@ -51,30 +51,30 @@ function clearErr(boxId) { $(boxId).hidden = true; }
 async function doLogin() {
   clearErr('login-err');
 
-  const empNo = normalizeEmpNo(empnoInput.value);
+  const email = normalizeEmail(empnoInput.value);
   const name = normalizeName($('f-name').value);
   const pw = normalizePw($('f-pw').value);
 
-  if (!empNo) return showErr('login-err', '사번은 숫자 5자리입니다.');
+  if (!email) return showErr('login-err', '사번은 숫자 5자리입니다.');
   if (!name) return showErr('login-err', '이름을 입력해주세요.');
   if (!pw) return showErr('login-err', '비밀번호는 숫자 4자리입니다.');
 
   const btn = $('btn-login');
   btn.disabled = true;
   btn.textContent = '확인 중…';
-  const res = await api.send({ action: 'auth', empNo, name, pw });
+  const res = await api.send({ action: 'auth', email, name, pw });
   btn.disabled = false;
   btn.textContent = '확인';
 
   if (!res.ok) return showErr('login-err', res.message || '오류가 발생했습니다.');
 
-  session.empNo = res.data.empNo;
+  session.email = res.data.email;
   session.name = res.data.name;
   session.pw = pw;
   session.picks = res.data.picks;
 
   if (res.data.mode === 'new') {
-    $('c-empno').textContent = session.empNo;
+    $('c-empno').textContent = session.email;
     $('c-name').textContent = session.name;
     show('step-confirm');
   } else {
@@ -119,7 +119,7 @@ $('btn-submit').addEventListener('click', async () => {
   btn.textContent = '제출 중…';
   const res = await api.send({
     action: 'save',
-    empNo: session.empNo, name: session.name, pw: session.pw,
+    email: session.email, name: session.name, pw: session.pw,
     pickA, pickB,
   });
   btn.disabled = false;
@@ -153,7 +153,7 @@ function renderDone() {
 }
 
 $('btn-again').addEventListener('click', () => {
-  session.empNo = ''; session.name = ''; session.pw = '';
+  session.email = ''; session.name = ''; session.pw = '';
   session.picks = { A: false, B: false };
   ['f-empno', 'f-name', 'f-pw'].forEach((id) => { $(id).value = ''; });
   hintEmpno.className = 'hint';

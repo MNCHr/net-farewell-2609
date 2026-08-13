@@ -11,7 +11,7 @@ var NCOLS = 12;
 
 /** responses 시트의 1-based 열 번호 */
 var COL = {
-  EMPNO: 1, NAME: 2, PICK_A: 3, PICK_B: 4, PW_HASH: 5, SALT: 6,
+  EMAIL: 1, NAME: 2, PICK_A: 3, PICK_B: 4, PW_HASH: 5, SALT: 6,
   CREATED: 7, UPDATED: 8, UPDATED_BY: 9, STATUS: 10, FAIL: 11, LOCKED: 12,
 };
 
@@ -28,7 +28,6 @@ function now_() {
  * assets/normalize.js 와 같은 규칙이다. 한쪽만 고치면 안 된다.
  */
 
-var EMPNO_LENGTH = 5;
 var PW_LENGTH = 4;
 var NAME_MAX = 20;
 
@@ -41,14 +40,6 @@ function toHalfWidthDigits_(s) {
   return s.replace(/[０-９]/g, function (c) {
     return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 0x30);
   });
-}
-
-function normalizeEmpNo_(raw) {
-  if (raw === null || raw === undefined) return null;
-  var digits = toHalfWidthDigits_(String(raw)).replace(/[^0-9]/g, '');
-  if (digits.length === 0 || digits.length > EMPNO_LENGTH) return null;
-  while (digits.length < EMPNO_LENGTH) digits = '0' + digits;   // padStart 는 쓰지 않는다
-  return digits;
 }
 
 function normalizeName_(raw) {
@@ -112,7 +103,7 @@ function boolOf_(v) {
 function rowFromValues_(values, rowIndex) {
   return {
     rowIndex: rowIndex,
-    empNo: normalizeEmpNo_(values[COL.EMPNO - 1]) || String(values[COL.EMPNO - 1] || ''),
+    email: normalizeEmail_(values[COL.EMAIL - 1]) || String(values[COL.EMAIL - 1] || ''),
     name: String(values[COL.NAME - 1] || ''),
     pickA: boolOf_(values[COL.PICK_A - 1]),
     pickB: boolOf_(values[COL.PICK_B - 1]),
@@ -129,7 +120,7 @@ function rowFromValues_(values, rowIndex) {
 
 function valuesFromRow_(row) {
   var v = [];
-  v[COL.EMPNO - 1] = row.empNo;
+  v[COL.EMAIL - 1] = row.email;
   v[COL.NAME - 1] = row.name;
   v[COL.PICK_A - 1] = !!row.pickA;
   v[COL.PICK_B - 1] = !!row.pickB;
@@ -150,31 +141,31 @@ function readRows_() {
   var values = sh.getDataRange().getValues();
   var out = [];
   for (var i = 1; i < values.length; i += 1) {          // 0행은 헤더
-    if (!values[i] || String(values[i][COL.EMPNO - 1] || '') === '') continue;
+    if (!values[i] || String(values[i][COL.EMAIL - 1] || '') === '') continue;
     out.push(rowFromValues_(values[i], i + 1));          // 시트는 1-based
   }
   return out;
 }
 
-function findByEmpNo_(rows, empNo) {
+function findByEmail_(rows, email) {
   for (var i = 0; i < rows.length; i += 1) {
-    if (rows[i].empNo === empNo && rows[i].status === 'active') return rows[i];
+    if (rows[i].email === email && rows[i].status === 'active') return rows[i];
   }
   return null;
 }
 
-function findAnyByEmpNo_(rows, empNo) {
+function findAnyByEmail_(rows, email) {
   var out = [];
   for (var i = 0; i < rows.length; i += 1) {
-    if (rows[i].empNo === empNo) out.push(rows[i]);
+    if (rows[i].email === email) out.push(rows[i]);
   }
   return out;
 }
 
-function blankRow_(empNo, name) {
+function blankRow_(email, name) {
   var iso = now_().toISOString();
   return {
-    rowIndex: 0, empNo: empNo, name: name,
+    rowIndex: 0, email: email, name: name,
     pickA: false, pickB: false, pwHash: '', salt: '',
     createdAt: iso, updatedAt: iso, updatedBy: 'self',
     status: 'active', failCount: 0, lockedUntil: '',
@@ -194,10 +185,10 @@ function writeRow_(row) {
   return row;
 }
 
-function writeLog_(action, empNo, actor, detail) {
+function writeLog_(action, email, actor, detail) {
   var sh = sheet_(SHEET_LOG);
   if (!sh) return;
-  sh.appendRow([now_().toISOString(), action, empNo, actor, detail || '']);
+  sh.appendRow([now_().toISOString(), action, email, actor, detail || '']);
 }
 
 /** 시트 읽기-수정-쓰기 사이에 다른 요청이 끼어들면 행이 덮어써진다. */
@@ -269,15 +260,15 @@ function clearFailure_(row) {
 }
 
 /**
- * 자격 판정. 성공하면 { row, mode, empNo, name, pw }, 실패하면 오류 응답을 돌려준다.
+ * 자격 판정. 성공하면 { row, mode, email, name, pw }, 실패하면 오류 응답을 돌려준다.
  * 반환값에 .ok 가 있으면 오류다.
  *
  * 이 함수는 절대 스스로 락을 잡지 않는다. 호출자(handleAuth_/handleSave_)가
  * 이미 withLock_ 안에 있기 때문이며, 여기서 또 잡으면 중첩 획득이 된다.
  */
 function verifyCredentials_(req) {
-  var empNo = normalizeEmpNo_(req.empNo);
-  if (!empNo) return err_('BAD_EMPNO', '사번은 숫자 5자리입니다. 다시 확인해주세요.');
+  var email = normalizeEmail_(req.email);
+  if (!email) return err_('BAD_EMAIL', '사번은 숫자 5자리입니다. 다시 확인해주세요.');
 
   var name = normalizeName_(req.name);
   if (!name) return err_('BAD_NAME', '이름을 입력해주세요.');
@@ -286,9 +277,9 @@ function verifyCredentials_(req) {
   if (!pw) return err_('BAD_PW', '비밀번호는 숫자 4자리입니다.');
 
   var rows = readRows_();
-  var row = findByEmpNo_(rows, empNo);
+  var row = findByEmail_(rows, email);
 
-  if (!row) return { row: null, mode: 'new', empNo: empNo, name: name, pw: pw };
+  if (!row) return { row: null, mode: 'new', email: email, name: name, pw: pw };
 
   if (row.name !== name) {
     return err_('NAME_MISMATCH', '사번과 이름이 일치하지 않습니다. 다시 확인해주세요.');
@@ -299,7 +290,7 @@ function verifyCredentials_(req) {
 
   // 관리자가 대리 입력한 행은 비밀번호가 없다. 이 사람이 지금 이어받는다.
   if (!row.pwHash) {
-    return { row: row, mode: 'claim', empNo: empNo, name: name, pw: pw };
+    return { row: row, mode: 'claim', email: email, name: name, pw: pw };
   }
 
   if (hashPw_(row.salt, pw) !== row.pwHash) {
@@ -307,7 +298,7 @@ function verifyCredentials_(req) {
   }
 
   clearFailure_(row);
-  return { row: row, mode: 'existing', empNo: empNo, name: name, pw: pw };
+  return { row: row, mode: 'existing', email: email, name: name, pw: pw };
 }
 
 /**
@@ -322,7 +313,7 @@ function handleAuth_(req) {
 
     return ok_({
       mode: v.mode,
-      empNo: v.empNo,
+      email: v.email,
       name: v.name,
       picks: {
         A: v.row ? !!v.row.pickA : false,
@@ -348,7 +339,7 @@ function handleSave_(req) {
 
     if (!row) {
       // 삭제된 행이 있으면 되살린다. 같은 사번의 active 행이 둘이 되면 안 된다.
-      var buried = findAnyByEmpNo_(readRows_(), v.empNo);
+      var buried = findAnyByEmail_(readRows_(), v.email);
       if (buried.length > 0) {
         row = buried[0];
         row.status = 'active';
@@ -359,7 +350,7 @@ function handleSave_(req) {
         // 되살아났다고 바뀌면 안 된다.
         action = 'revive';
       } else {
-        row = blankRow_(v.empNo, v.name);
+        row = blankRow_(v.email, v.name);
         action = 'create';
       }
     } else {
@@ -382,7 +373,7 @@ function handleSave_(req) {
 
     if (row.rowIndex) writeRow_(row); else appendRow_(row);
 
-    writeLog_(action, v.empNo, 'self', 'A=' + pickA + ' B=' + pickB);
+    writeLog_(action, v.email, 'self', 'A=' + pickA + ' B=' + pickB);
 
     return ok_({ picks: { A: pickA, B: pickB }, updatedAt: iso });
   });
@@ -482,24 +473,24 @@ function computeWarnings_(rows) {
   for (var i = 0; i < act.length; i += 1) {
     var n = act[i].name;
     if (!byName[n]) byName[n] = [];
-    if (byName[n].indexOf(act[i].empNo) < 0) byName[n].push(act[i].empNo);
+    if (byName[n].indexOf(act[i].email) < 0) byName[n].push(act[i].email);
   }
   for (var name in byName) {
     if (byName[name].length > 1) {
-      warnings.push({ type: 'SAME_NAME_DIFF_EMPNO', name: name, empNos: byName[name] });
+      warnings.push({ type: 'SAME_NAME_DIFF_EMAIL', name: name, emails: byName[name] });
     }
   }
 
   // 같은 사번은 active 가 하나뿐이므로 삭제분까지 봐야 잡힌다. 같은 이유로 Object.create(null).
   var byEmp = Object.create(null);
   for (var j = 0; j < rows.length; j += 1) {
-    var e = rows[j].empNo;
+    var e = rows[j].email;
     if (!byEmp[e]) byEmp[e] = [];
     if (byEmp[e].indexOf(rows[j].name) < 0) byEmp[e].push(rows[j].name);
   }
   for (var emp in byEmp) {
     if (byEmp[emp].length > 1) {
-      warnings.push({ type: 'SAME_EMPNO_DIFF_NAME', empNo: emp, names: byEmp[emp] });
+      warnings.push({ type: 'SAME_EMAIL_DIFF_NAME', email: emp, names: byEmp[emp] });
     }
   }
 
@@ -508,7 +499,7 @@ function computeWarnings_(rows) {
 
 function publicRow_(r) {
   return {
-    empNo: r.empNo, name: r.name,
+    email: r.email, name: r.name,
     pickA: !!r.pickA, pickB: !!r.pickB,
     createdAt: r.createdAt, updatedAt: r.updatedAt,
     updatedBy: r.updatedBy, status: r.status,
@@ -533,7 +524,7 @@ function handleAdminData_(req) {
     var act = activeRows_(rows);
     var out = [];
     for (var i = 0; i < act.length; i += 1) out.push(publicRow_(act[i]));
-    out.sort(function (x, y) { return x.empNo < y.empNo ? -1 : (x.empNo > y.empNo ? 1 : 0); });
+    out.sort(function (x, y) { return x.email < y.email ? -1 : (x.email > y.email ? 1 : 0); });
 
     return ok_({
       stats: computeStats_(rows),
@@ -548,10 +539,10 @@ function handleAdminResetPw_(req) {
     var denied = requireAdmin_(req);
     if (denied) return denied;
 
-    var empNo = normalizeEmpNo_(req.empNo);
-    if (!empNo) return err_('BAD_EMPNO', '사번은 숫자 5자리입니다.');
+    var email = normalizeEmail_(req.email);
+    if (!email) return err_('BAD_EMAIL', '사번은 숫자 5자리입니다.');
 
-    var row = findByEmpNo_(readRows_(), empNo);
+    var row = findByEmail_(readRows_(), email);
     if (!row) return err_('NOT_FOUND', '해당 사번의 응답이 없습니다.');
 
     row.pwHash = '';
@@ -559,9 +550,9 @@ function handleAdminResetPw_(req) {
     row.failCount = 0;
     row.lockedUntil = '';
     writeRow_(row);
-    writeLog_('admin_reset_pw', empNo, 'admin', '');
+    writeLog_('admin_reset_pw', email, 'admin', '');
 
-    return ok_({ empNo: empNo });
+    return ok_({ email: email });
   });
 }
 
@@ -570,16 +561,16 @@ function handleAdminUpsert_(req) {
     var denied = requireAdmin_(req);
     if (denied) return denied;
 
-    var empNo = normalizeEmpNo_(req.empNo);
-    if (!empNo) return err_('BAD_EMPNO', '사번은 숫자 5자리입니다.');
+    var email = normalizeEmail_(req.email);
+    if (!email) return err_('BAD_EMAIL', '사번은 숫자 5자리입니다.');
     var name = normalizeName_(req.name);
     if (!name) return err_('BAD_NAME', '이름을 입력해주세요.');
 
     var rows = readRows_();
-    var row = findByEmpNo_(rows, empNo);
+    var row = findByEmail_(rows, email);
     var isNew = false;
     if (!row) {
-      var buried = findAnyByEmpNo_(rows, empNo);
+      var buried = findAnyByEmail_(rows, email);
       if (buried.length > 0) {
         row = buried[0];
         row.status = 'active';
@@ -587,7 +578,7 @@ function handleAdminUpsert_(req) {
         row.failCount = 0;
         row.lockedUntil = '';
       } else {
-        row = blankRow_(empNo, name);
+        row = blankRow_(email, name);
         isNew = true;
       }
     }
@@ -600,10 +591,10 @@ function handleAdminUpsert_(req) {
     // pwHash 는 건드리지 않는다. 신규면 빈 값이라 본인이 나중에 이어받는다.
 
     if (row.rowIndex) writeRow_(row); else appendRow_(row);
-    writeLog_('admin_upsert', empNo, 'admin',
+    writeLog_('admin_upsert', email, 'admin',
       (isNew ? 'new ' : 'edit ') + 'A=' + row.pickA + ' B=' + row.pickB);
 
-    return ok_({ empNo: empNo, created: isNew });
+    return ok_({ email: email, created: isNew });
   });
 }
 
@@ -612,19 +603,19 @@ function handleAdminDelete_(req) {
     var denied = requireAdmin_(req);
     if (denied) return denied;
 
-    var empNo = normalizeEmpNo_(req.empNo);
-    if (!empNo) return err_('BAD_EMPNO', '사번은 숫자 5자리입니다.');
+    var email = normalizeEmail_(req.email);
+    if (!email) return err_('BAD_EMAIL', '사번은 숫자 5자리입니다.');
 
-    var row = findByEmpNo_(readRows_(), empNo);
+    var row = findByEmail_(readRows_(), email);
     if (!row) return err_('NOT_FOUND', '해당 사번의 응답이 없습니다.');
 
     row.status = 'deleted';
     row.updatedAt = now_().toISOString();
     row.updatedBy = 'admin';
     writeRow_(row);
-    writeLog_('admin_delete', empNo, 'admin', '');
+    writeLog_('admin_delete', email, 'admin', '');
 
-    return ok_({ empNo: empNo });
+    return ok_({ email: email });
   });
 }
 
@@ -688,7 +679,7 @@ function handleRequest_(req) {
 
 /** responses 1행이 갖춰야 할 헤더. README 1.3, test.html 이 이 순서를 그대로 안내한다. */
 var HEADER_RESPONSES_ = [
-  'empNo', 'name', 'pickA', 'pickB', 'pwHash', 'salt',
+  'email', 'name', 'pickA', 'pickB', 'pwHash', 'salt',
   'createdAt', 'updatedAt', 'updatedBy', 'status', 'failCount', 'lockedUntil',
 ];
 

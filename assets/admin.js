@@ -1,6 +1,6 @@
 import { EXEC_URL, RETIREES } from './config.js';
 import { createApi } from './api.js';
-import { normalizeEmpNo, normalizeName } from './normalize.js';
+import { normalizeEmail, normalizeName } from './normalize.js';
 
 const api = createApi({ execUrl: EXEC_URL });
 const $ = (id) => document.getElementById(id);
@@ -119,9 +119,9 @@ function renderWarnings(warnings) {
   warnings.forEach((w) => {
     const d = document.createElement('div');
     d.className = 'warn';
-    d.textContent = w.type === 'SAME_NAME_DIFF_EMPNO'
-      ? `‘${w.name}’ 님이 사번 ${w.empNos.join(' / ')} 로 두 건 있습니다. 사번 오타일 수 있습니다.`
-      : `사번 ${w.empNo} 에 이름이 ${w.names.join(' / ')} 로 다르게 기록돼 있습니다.`;
+    d.textContent = w.type === 'SAME_NAME_DIFF_EMAIL'
+      ? `‘${w.name}’ 님이 사번 ${w.emails.join(' / ')} 로 두 건 있습니다. 사번 오타일 수 있습니다.`
+      : `사번 ${w.email} 에 이름이 ${w.names.join(' / ')} 로 다르게 기록돼 있습니다.`;
     box.appendChild(d);
   });
 }
@@ -152,7 +152,7 @@ function renderRows(rows) {
   rows.forEach((r) => {
     const tr = document.createElement('tr');
     const cells = [
-      r.empNo,
+      r.email,
       r.name + (r.hasPw ? '' : ' (비번 미설정)') + (r.locked ? ' 🔒' : ''),
       r.pickA ? '✓' : '—',
       r.pickB ? '✓' : '—',
@@ -187,23 +187,23 @@ function actionBtn(text, onClick) {
 /* ---------- 조작 ---------- */
 
 async function resetPw(r) {
-  if (!confirm(`${r.name}(${r.empNo}) 님의 비밀번호를 초기화합니다.\n`
+  if (!confirm(`${r.name}(${r.email}) 님의 비밀번호를 초기화합니다.\n`
              + '다음 로그인 때 입력하는 비밀번호가 새 비밀번호가 됩니다. 계속할까요?')) return;
-  const res = await api.send({ action: 'adminResetPw', adminPw, empNo: r.empNo });
+  const res = await api.send({ action: 'adminResetPw', adminPw, email: r.email });
   if (!res.ok) return showErr('list-err', res.message);
   await refreshAfterWrite();
 }
 
 async function del(r) {
-  if (!confirm(`${r.name}(${r.empNo}) 님의 응답을 삭제합니다.\n`
+  if (!confirm(`${r.name}(${r.email}) 님의 응답을 삭제합니다.\n`
              + '집계에서 빠지지만 시트에는 기록이 남습니다. 계속할까요?')) return;
-  const res = await api.send({ action: 'adminDelete', adminPw, empNo: r.empNo });
+  const res = await api.send({ action: 'adminDelete', adminPw, email: r.email });
   if (!res.ok) return showErr('list-err', res.message);
   await refreshAfterWrite();
 }
 
 function loadIntoUpsert(r) {
-  $('u-empno').value = r.empNo;
+  $('u-empno').value = r.email;
   $('u-name').value = r.name;
   $('up-A').checked = r.pickA;
   $('up-B').checked = r.pickB;
@@ -226,9 +226,9 @@ function renderUpsertPicks() {
   });
 }
 
-/** empNo 는 이미 normalizeEmpNo 를 거친 값이어야 한다 — lastRows 의 empNo 도 정규화돼 있다. */
-function findExistingRow(empNo) {
-  return lastRows.find((r) => r.empNo === empNo) || null;
+/** email 는 이미 normalizeEmail 를 거친 값이어야 한다 — lastRows 의 email 도 정규화돼 있다. */
+function findExistingRow(email) {
+  return lastRows.find((r) => r.email === email) || null;
 }
 
 function pickText(pickA, pickB) {
@@ -243,17 +243,17 @@ function pickText(pickA, pickB) {
  * 나란히 보여준다 — 대리 입력 중 사번 오타로 남의 응답을 지우는 사고를 여기서 잡기 위해서다.
  * 겹치지 않으면 정규화된 사번·이름으로 새로 추가된다는 점을 보여준다(01234 vs 1234 오인 방지).
  */
-function confirmUpsert(empNo, name, pickA, pickB) {
-  const existing = findExistingRow(empNo);
+function confirmUpsert(email, name, pickA, pickB) {
+  const existing = findExistingRow(email);
   if (existing) {
     return confirm(
-      `${existing.name}(${empNo}) 님의 기존 응답을 덮어씁니다.\n`
+      `${existing.name}(${email}) 님의 기존 응답을 덮어씁니다.\n`
       + `기존: ${pickText(existing.pickA, existing.pickB)}\n`
       + `변경 후: ${name} 님, ${pickText(pickA, pickB)}\n`
       + '계속할까요?'
     );
   }
-  return confirm(`사번 ${empNo}, 이름 ${name} 으로 새 응답을 추가합니다.\n계속할까요?`);
+  return confirm(`사번 ${email}, 이름 ${name} 으로 새 응답을 추가합니다.\n계속할까요?`);
 }
 
 function showSaved(created) {
@@ -268,16 +268,16 @@ $('btn-upsert').addEventListener('click', async () => {
   if (stale) return showErr('u-err', '목록을 다시 불러오지 못해 최신 상태인지 알 수 없어 저장을 막았습니다. 위 배너의 다시 불러오기를 누른 뒤 다시 시도해주세요.');
   clearErr('u-err');
   $('u-saved').hidden = true;
-  const empNo = normalizeEmpNo($('u-empno').value);
+  const email = normalizeEmail($('u-empno').value);
   const name = normalizeName($('u-name').value);
-  if (!empNo) return showErr('u-err', '사번은 숫자 5자리입니다.');
+  if (!email) return showErr('u-err', '사번은 숫자 5자리입니다.');
   if (!name) return showErr('u-err', '이름을 입력해주세요.');
 
   const pickA = $('up-A').checked;
   const pickB = $('up-B').checked;
-  if (!confirmUpsert(empNo, name, pickA, pickB)) return;
+  if (!confirmUpsert(email, name, pickA, pickB)) return;
 
-  const res = await api.send({ action: 'adminUpsert', adminPw, empNo, name, pickA, pickB });
+  const res = await api.send({ action: 'adminUpsert', adminPw, email, name, pickA, pickB });
   if (!res.ok) return showErr('u-err', res.message);
 
   $('u-empno').value = ''; $('u-name').value = '';
@@ -292,7 +292,7 @@ $('btn-copy').addEventListener('click', async () => {
   if (stale) return; // 최신 상태가 아닐 수 있는 표를 정산 시트로 복사하면 안 된다.
   const header = ['사번', '이름', RETIREES[0].label, RETIREES[1].label, '최종수정'].join('\t');
   const body = lastRows.map((r) => [
-    r.empNo, r.name, r.pickA ? 'O' : '', r.pickB ? 'O' : '', r.updatedAt,
+    r.email, r.name, r.pickA ? 'O' : '', r.pickB ? 'O' : '', r.updatedAt,
   ].join('\t'));
   const text = [header, ...body].join('\n');
   try {

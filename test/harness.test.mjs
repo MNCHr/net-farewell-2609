@@ -10,13 +10,13 @@ test('중첩 구조(행-안-행)를 host 배열 리터럴과 deepEqual 로 바�
   // 이게 핵심 케이스다: 예전의 얕은 [...x] 스프레드는 바깥 배열만 host realm 으로 바꾸고
   // 안쪽 행 배열은 sandbox realm 인 채로 남겨서, 이런 중첩 구조에서는 여전히 실패했다.
   const s = loadServer();
-  s.fn.appendRow_(s.fn.blankRow_('00042', '이영희'));
-  s.fn.appendRow_(s.fn.blankRow_('00099', '박민수'));
+  s.fn.appendRow_(s.fn.blankRow_('younghee@etri.re.kr', '이영희'));
+  s.fn.appendRow_(s.fn.blankRow_('minsu@etri.re.kr', '박민수'));
 
   assert.deepEqual(s.rows(), [
-    ['00042', '이영희', false, false, '', '', '2026-08-12T09:00:00.000Z',
+    ['younghee@etri.re.kr', '이영희', false, false, '', '', '2026-08-12T09:00:00.000Z',
      '2026-08-12T09:00:00.000Z', 'self', 'active', 0, ''],
-    ['00099', '박민수', false, false, '', '', '2026-08-12T09:00:00.000Z',
+    ['minsu@etri.re.kr', '박민수', false, false, '', '', '2026-08-12T09:00:00.000Z',
      '2026-08-12T09:00:00.000Z', 'self', 'active', 0, ''],
   ]);
 });
@@ -74,7 +74,7 @@ test('s.sheets 는 hostify 되지 않은, 살아있는 fake 그대로다', () =>
   // sheets 를 하네스 밖에서 직접 건드리고, 그 변화가 이후 s.rows()/s.call() 에 반영되는지
   // 확인한다. hostify 가 sheets 를 정적 사본으로 바꿔버리면 이 테스트가 깨진다 — 앞으로
   // 누군가 실수로 `sheets: hostify(sheets)` 로 바꾸는 걸 잡기 위한 회귀 가드다.
-  s.sheets.responses.appendRow(['00042', '이영희', false, false, '', '',
+  s.sheets.responses.appendRow(['younghee@etri.re.kr', '이영희', false, false, '', '',
     '2026-08-12T09:00:00.000Z', '2026-08-12T09:00:00.000Z', 'self', 'active', 0, '']);
   assert.equal(s.rows().length, 1, '시트 fake 를 직접 건드린 결과가 하네스에 그대로 보여야 한다');
 

@@ -1,5 +1,5 @@
 /**
- * 사번·이름·비밀번호 정규화.
+ * 이메일·이름·비밀번호 정규화.
  *
  * 같은 규칙이 apps-script/Code.gs 에도 있다. 한쪽만 고치면 안 된다.
  * test/cases/normalize-cases.mjs 가 두 구현을 함께 검증한다.
@@ -8,7 +8,6 @@
 import { EMAIL_DOMAIN } from './config.js';
 
 const FULLWIDTH_DIGITS = /[０-９]/g;
-const NON_DIGIT = /[^0-9]/g;
 // \s 는 U+3000(전각 공백)도 포함하지만, 제로폭 문자는 따로 지워야 한다.
 // 눈에 안 보이는 문자를 소스에 원문자 그대로 박아두지 않는다 — 이 파일을 편집기 사이로
 // 옮겨적다가 한 글자만 빠져도(U+FEFF 가 실제로 두 번 그렇게 사라진 적이 있다) 살아남은
@@ -16,7 +15,6 @@ const NON_DIGIT = /[^0-9]/g;
 // U+200B-U+200D 는 제로폭 공백·비접합자·접합자 세 글자를 범위 하나로 묶은 것이다.
 const WHITESPACE = /[\s\u3000\u200B-\u200D\uFEFF]/g;
 
-export const EMPNO_LENGTH = 5;
 export const PW_LENGTH = 4;
 export const NAME_MAX = 20;
 
@@ -28,14 +26,6 @@ function toHalfWidthDigits(s) {
   return s.replace(FULLWIDTH_DIGITS, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 0x30));
 }
 
-/** '1234' → '01234'. 숫자만 남기고 5자리가 될 때까지 앞에 0을 채운다. */
-export function normalizeEmpNo(raw) {
-  if (raw === null || raw === undefined) return null;
-  const digits = toHalfWidthDigits(String(raw)).replace(NON_DIGIT, '');
-  if (digits.length === 0 || digits.length > EMPNO_LENGTH) return null;
-  return digits.padStart(EMPNO_LENGTH, '0');
-}
-
 /** '홍 길동' → '홍길동'. 공백을 모두 지우고 NFC 로 모은다. */
 export function normalizeName(raw) {
   if (raw === null || raw === undefined) return null;
@@ -44,7 +34,7 @@ export function normalizeName(raw) {
   return cleaned;
 }
 
-/** 숫자 4자리만 허용. 사번과 달리 0을 채우지 않는다. */
+/** 숫자 4자리만 허용. 앞자리 0이 있어도 그대로 두고 채우지 않는다. */
 export function normalizePw(raw) {
   if (raw === null || raw === undefined) return null;
   const s = toHalfWidthDigits(String(raw)).replace(WHITESPACE, '');

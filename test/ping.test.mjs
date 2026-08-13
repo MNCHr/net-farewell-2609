@@ -43,7 +43,7 @@ test('헤더 행이 정확하면 headerOk 가 true', () => {
 test('헤더 행이 없거나 틀리면 headerOk 가 false', () => {
   const s = loadServer();
   s.sheets.responses.getRange(1, 1, 1, 12).setValues([[
-    'empNo', 'name', 'pickA', 'pickB', 'pw', 'salt',
+    'email', 'name', 'pickA', 'pickB', 'pw', 'salt',
     'createdAt', 'updatedAt', 'updatedBy', 'status', 'failCount', 'lockedUntil',
   ]]); // 5열이 'pwHash' 가 아니라 'pw' — 오타 하나로도 못 믿는 헤더가 된다
   const res = s.call({ action: 'ping' });

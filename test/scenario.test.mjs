@@ -14,45 +14,47 @@ function fresh() {
 test('시나리오 1-2: 신규 가입 → 제출 → 재로그인 → 수정', () => {
   const s = fresh();
 
-  assert.equal(s.call({ action: 'auth', empNo: '1111', name: '김민준', pw: '1111' }).data.mode, 'new');
+  assert.equal(s.call({ action: 'auth', email: 'LEE', name: '김민준', pw: '1111' }).data.mode, 'new');
   assert.equal(s.rows().length, 0);
 
-  s.call({ action: 'save', empNo: '1111', name: '김민준', pw: '1111', pickA: true, pickB: true });
+  s.call({ action: 'save', email: 'LEE', name: '김민준', pw: '1111', pickA: true, pickB: true });
   assert.equal(s.rows().length, 1);
 
-  const back = s.call({ action: 'auth', empNo: '01111', name: '김민준', pw: '1111' });
+  const back = s.call({ action: 'auth', email: 'lee@etri.re.kr', name: '김민준', pw: '1111' });
   assert.equal(back.data.mode, 'existing');
   assert.deepEqual(back.data.picks, { A: true, B: true });
 
-  s.call({ action: 'save', empNo: '01111', name: '김민준', pw: '1111', pickA: true, pickB: false });
+  s.call({ action: 'save', email: 'lee@etri.re.kr', name: '김민준', pw: '1111', pickA: true, pickB: false });
   assert.equal(s.rows().length, 1, '행이 늘면 안 된다');
   assert.equal(s.rows()[0][3], false);
 });
 
-test('시나리오 3: 앞의 0을 뺀 사번은 같은 행으로 모인다', () => {
+test('시나리오 3: 아이디·대문자·전체 이메일이 같은 행으로 모인다', () => {
   const s = fresh();
-  s.call({ action: 'save', empNo: '02222', name: '이서연', pw: '2222', pickA: true, pickB: false });
-  s.call({ action: 'save', empNo: '2222', name: '이서연', pw: '2222', pickA: false, pickB: true });
-  assert.equal(s.rows().length, 1);
+  s.call({ action: 'save', email: 'park', name: '이서연', pw: '2222', pickA: true, pickB: false });
+  s.call({ action: 'save', email: 'PARK', name: '이서연', pw: '2222', pickA: false, pickB: true });
+  s.call({ action: 'save', email: 'park@etri.re.kr', name: '이서연', pw: '2222', pickA: true, pickB: true });
+  assert.equal(s.rows().length, 1, '세 번 다 같은 사람이어야 한다');
+  assert.equal(s.rows()[0][0], 'park@etri.re.kr');
   assert.equal(s.call({ action: 'adminData', adminPw: ADMIN }).data.stats.total, 1);
 });
 
 test('시나리오 4-5: 이름 불일치 · 5회 실패 잠금 · 10분 뒤 해제', () => {
   const s = fresh();
-  s.call({ action: 'save', empNo: '33333', name: '박도유', pw: '3333', pickA: true, pickB: true });
+  s.call({ action: 'save', email: 'choi', name: '박도유', pw: '3333', pickA: true, pickB: true });
 
-  assert.equal(s.call({ action: 'auth', empNo: '33333', name: '박도윤', pw: '3333' }).error, 'NAME_MISMATCH');
+  assert.equal(s.call({ action: 'auth', email: 'choi', name: '박도윤', pw: '3333' }).error, 'NAME_MISMATCH');
 
-  for (let i = 0; i < 5; i += 1) s.call({ action: 'auth', empNo: '33333', name: '박도유', pw: '0000' });
-  assert.equal(s.call({ action: 'auth', empNo: '33333', name: '박도유', pw: '3333' }).error, 'LOCKED');
+  for (let i = 0; i < 5; i += 1) s.call({ action: 'auth', email: 'choi', name: '박도유', pw: '0000' });
+  assert.equal(s.call({ action: 'auth', email: 'choi', name: '박도유', pw: '3333' }).error, 'LOCKED');
 
   s.setNow('2026-08-12T09:11:00.000Z');
-  assert.equal(s.call({ action: 'auth', empNo: '33333', name: '박도유', pw: '3333' }).data.mode, 'existing');
+  assert.equal(s.call({ action: 'auth', email: 'choi', name: '박도유', pw: '3333' }).data.mode, 'existing');
 });
 
 test('시나리오 6: 아무것도 체크하지 않은 제출이 none 에 잡힌다', () => {
   const s = fresh();
-  s.call({ action: 'save', empNo: '44444', name: '최수아', pw: '4444', pickA: false, pickB: false });
+  s.call({ action: 'save', email: 'jung', name: '최수아', pw: '4444', pickA: false, pickB: false });
   const st = s.call({ action: 'adminData', adminPw: ADMIN }).data.stats;
   assert.equal(st.total, 1);
   assert.equal(st.none, 1);
@@ -62,61 +64,61 @@ test('시나리오 6: 아무것도 체크하지 않은 제출이 none 에 잡힌
 
 test('시나리오 7 · 12: 관리자 비밀번호 없이는 어떤 데이터도 안 나온다', () => {
   const s = fresh();
-  s.call({ action: 'save', empNo: '55555', name: '오지훈', pw: '5555', pickA: true, pickB: false });
+  s.call({ action: 'save', email: 'kang', name: '오지훈', pw: '5555', pickA: true, pickB: false });
 
   for (const req of [
     { action: 'adminData' },
     { action: 'adminData', adminPw: '' },
     { action: 'adminData', adminPw: '틀림' },
-    { action: 'adminDelete', adminPw: '틀림', empNo: '55555' },
-    { action: 'adminUpsert', adminPw: '틀림', empNo: '55555', name: '오지훈' },
-    { action: 'adminResetPw', adminPw: '틀림', empNo: '55555' },
+    { action: 'adminDelete', adminPw: '틀림', email: 'kang' },
+    { action: 'adminUpsert', adminPw: '틀림', email: 'kang', name: '오지훈' },
+    { action: 'adminResetPw', adminPw: '틀림', email: 'kang' },
   ]) {
     const res = s.call(req);
     assert.equal(res.ok, false, JSON.stringify(req));
-    assert.equal(/오지훈|55555/.test(JSON.stringify(res)), false, '데이터가 새면 안 된다');
+    assert.equal(/오지훈|kang@etri\.re\.kr/.test(JSON.stringify(res)), false, '데이터가 새면 안 된다');
   }
   assert.equal(s.rows()[0][9], 'active', '아무것도 바뀌지 않았어야 한다');
 });
 
 test('시나리오 8: 관리자 대리 입력 → 본인이 이어받아 수정', () => {
   const s = fresh();
-  s.call({ action: 'adminUpsert', adminPw: ADMIN, empNo: '6666', name: '한도경', pickA: true, pickB: false });
-  assert.equal(s.rows()[0][0], '06666');
+  s.call({ action: 'adminUpsert', adminPw: ADMIN, email: 'YOON', name: '한도경', pickA: true, pickB: false });
+  assert.equal(s.rows()[0][0], 'yoon@etri.re.kr');
   assert.equal(s.rows()[0][4], '', '비번은 비어 있다');
 
-  const claim = s.call({ action: 'auth', empNo: '06666', name: '한도경', pw: '6666' });
+  const claim = s.call({ action: 'auth', email: 'yoon@etri.re.kr', name: '한도경', pw: '6666' });
   assert.equal(claim.data.mode, 'claim');
   assert.deepEqual(claim.data.picks, { A: true, B: false });
 
-  s.call({ action: 'save', empNo: '06666', name: '한도경', pw: '6666', pickA: true, pickB: true });
-  assert.equal(s.call({ action: 'auth', empNo: '06666', name: '한도경', pw: '6666' }).data.mode, 'existing');
+  s.call({ action: 'save', email: 'yoon@etri.re.kr', name: '한도경', pw: '6666', pickA: true, pickB: true });
+  assert.equal(s.call({ action: 'auth', email: 'yoon@etri.re.kr', name: '한도경', pw: '6666' }).data.mode, 'existing');
   assert.equal(s.rows().length, 1);
 });
 
 test('시나리오 9: 비번 초기화 → 새 비번으로 재진입', () => {
   const s = fresh();
-  s.call({ action: 'save', empNo: '07777', name: '서지민', pw: '7777', pickA: true, pickB: true });
-  s.call({ action: 'adminResetPw', adminPw: ADMIN, empNo: '07777' });
+  s.call({ action: 'save', email: 'seo', name: '서지민', pw: '7777', pickA: true, pickB: true });
+  s.call({ action: 'adminResetPw', adminPw: ADMIN, email: 'seo' });
 
-  assert.equal(s.call({ action: 'auth', empNo: '07777', name: '서지민', pw: '7777' }).data.mode, 'claim',
+  assert.equal(s.call({ action: 'auth', email: 'seo', name: '서지민', pw: '7777' }).data.mode, 'claim',
     '옛 비번도 새 비번도 아무거나 통한다 — 미설정 상태이므로');
-  s.call({ action: 'save', empNo: '07777', name: '서지민', pw: '8888', pickA: true, pickB: true });
-  assert.equal(s.call({ action: 'auth', empNo: '07777', name: '서지민', pw: '8888' }).data.mode, 'existing');
-  assert.equal(s.call({ action: 'auth', empNo: '07777', name: '서지민', pw: '7777' }).error, 'WRONG_PW',
+  s.call({ action: 'save', email: 'seo', name: '서지민', pw: '8888', pickA: true, pickB: true });
+  assert.equal(s.call({ action: 'auth', email: 'seo', name: '서지민', pw: '8888' }).data.mode, 'existing');
+  assert.equal(s.call({ action: 'auth', email: 'seo', name: '서지민', pw: '7777' }).error, 'WRONG_PW',
     '새 비번을 정한 뒤에는 초기화 전 비번이 되살아나면 안 된다');
 });
 
 test('시나리오 10-11: 삭제는 집계에서만 빠지고, 재가입하면 되살아난다', () => {
   const s = fresh();
-  s.call({ action: 'save', empNo: '08888', name: '배윤아', pw: '9999', pickA: true, pickB: true });
-  s.call({ action: 'adminDelete', adminPw: ADMIN, empNo: '08888' });
+  s.call({ action: 'save', email: 'bae', name: '배윤아', pw: '9999', pickA: true, pickB: true });
+  s.call({ action: 'adminDelete', adminPw: ADMIN, email: 'bae' });
 
   assert.equal(s.call({ action: 'adminData', adminPw: ADMIN }).data.stats.total, 0);
   assert.equal(s.rows().length, 1, '시트에는 남아 있다');
   assert.equal(s.rows()[0][9], 'deleted');
 
-  s.call({ action: 'save', empNo: '08888', name: '배윤아', pw: '1010', pickA: false, pickB: true });
+  s.call({ action: 'save', email: 'bae', name: '배윤아', pw: '1010', pickA: false, pickB: true });
   assert.equal(s.rows().length, 1, '새 행이 생기면 안 된다');
   assert.equal(s.call({ action: 'adminData', adminPw: ADMIN }).data.stats.total, 1);
 
@@ -125,28 +127,28 @@ test('시나리오 10-11: 삭제는 집계에서만 빠지고, 재가입하면 �
   // WRONG_PW 로 막히다 5회 잠금까지 갔다. 되살아난 뒤 '새로 낸 비밀번호로 실제로
   // 들어가지는지'를 물어야만 그 버그가 잡힌다.
   assert.equal(
-    s.call({ action: 'auth', empNo: '08888', name: '배윤아', pw: '1010' }).data.mode,
+    s.call({ action: 'auth', email: 'bae', name: '배윤아', pw: '1010' }).data.mode,
     'existing', '재가입할 때 낸 비밀번호로 들어갈 수 있어야 한다');
   assert.equal(
-    s.call({ action: 'auth', empNo: '08888', name: '배윤아', pw: '9999' }).error,
+    s.call({ action: 'auth', email: 'bae', name: '배윤아', pw: '9999' }).error,
     'WRONG_PW', '삭제 전 비밀번호는 더 이상 통하지 않아야 한다');
 });
 
 test('시나리오 13: 어떤 응답에도 pwHash·salt 가 없다', () => {
   const s = fresh();
-  s.call({ action: 'save', empNo: '01111', name: '김민준', pw: '1111', pickA: true, pickB: false });
+  s.call({ action: 'save', email: 'lee', name: '김민준', pw: '1111', pickA: true, pickB: false });
 
   const responses = [
     s.call({ action: 'ping' }),
-    s.call({ action: 'auth', empNo: '01111', name: '김민준', pw: '1111' }),
-    s.call({ action: 'auth', empNo: '01111', name: '김민준', pw: '0000' }),
-    s.call({ action: 'save', empNo: '01111', name: '김민준', pw: '1111', pickA: false, pickB: true }),
+    s.call({ action: 'auth', email: 'lee', name: '김민준', pw: '1111' }),
+    s.call({ action: 'auth', email: 'lee', name: '김민준', pw: '0000' }),
+    s.call({ action: 'save', email: 'lee', name: '김민준', pw: '1111', pickA: false, pickB: true }),
     s.call({ action: 'adminData', adminPw: ADMIN }),
     // 세 관리자 조작 응답도 훑는다 — adminData 만 훑고 나머지 셋을 빼놓으면
     // 이 응답들이 새로 pwHash/salt 를 실어 보내도 이 테스트가 못 잡는다.
-    s.call({ action: 'adminUpsert', adminPw: ADMIN, empNo: '01111', name: '김민준', pickA: true, pickB: true }),
-    s.call({ action: 'adminResetPw', adminPw: ADMIN, empNo: '01111' }),
-    s.call({ action: 'adminDelete', adminPw: ADMIN, empNo: '01111' }),
+    s.call({ action: 'adminUpsert', adminPw: ADMIN, email: 'lee', name: '김민준', pickA: true, pickB: true }),
+    s.call({ action: 'adminResetPw', adminPw: ADMIN, email: 'lee' }),
+    s.call({ action: 'adminDelete', adminPw: ADMIN, email: 'lee' }),
   ];
   for (const r of responses) {
     assert.equal(/pwHash|"salt"|admin-salt/.test(JSON.stringify(r)), false, JSON.stringify(r).slice(0, 120));
@@ -156,9 +158,9 @@ test('시나리오 13: 어떤 응답에도 pwHash·salt 가 없다', () => {
 test('108명이 제출해도 집계 합계가 어긋나지 않는다', () => {
   const s = fresh();
   for (let i = 1; i <= 108; i += 1) {
-    const empNo = String(i).padStart(5, '0');
+    const email = 'user' + i;
     s.call({
-      action: 'save', empNo, name: '사람' + i, pw: '1234',
+      action: 'save', email, name: '사람' + i, pw: '1234',
       pickA: i % 3 !== 0, pickB: i % 4 !== 0,
     });
   }
