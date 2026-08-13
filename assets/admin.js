@@ -1,6 +1,7 @@
 import { EXEC_URL, RETIREES } from './config.js';
 import { createApi } from './api.js';
 import { normalizeEmail, normalizeName } from './normalize.js';
+import { buildTable, countFor } from './table.js';
 
 const api = createApi({ execUrl: EXEC_URL });
 const $ = (id) => document.getElementById(id);
@@ -23,7 +24,7 @@ function setStale(isStale, message) {
   stale = isStale;
   $('stale-banner').hidden = !isStale;
   $('stale-reason').textContent = (isStale && message) ? `새로고침이 실패한 이유: ${message}` : '';
-  $('btn-copy').disabled = isStale;
+  refreshCopyButtons();
   $('btn-upsert').disabled = isStale;
 }
 
@@ -108,6 +109,7 @@ function render(data) {
 
   renderWarnings(data.warnings);
   renderRows(data.rows);
+  refreshCopyButtons();
 }
 
 function renderWarnings(warnings) {
@@ -288,13 +290,13 @@ $('btn-upsert').addEventListener('click', async () => {
 
 /* ---------- 표 복사 ---------- */
 
-$('btn-copy').addEventListener('click', async () => {
-  if (stale) return; // 최신 상태가 아닐 수 있는 표를 정산 시트로 복사하면 안 된다.
-  const header = ['이메일', '이름', RETIREES[0].label, RETIREES[1].label, '최종수정'].join('\t');
-  const body = lastRows.map((r) => [
-    r.email, r.name, r.pickA ? 'O' : '', r.pickB ? 'O' : '', r.updatedAt,
-  ].join('\t'));
-  const text = [header, ...body].join('\n');
+const COPY_BUTTONS = [
+  { id: 'btn-copy', filterKey: null },
+  { id: 'btn-copy-A', filterKey: 'A' },
+  { id: 'btn-copy-B', filterKey: 'B' },
+];
+
+async function toClipboard(text) {
   try {
     await navigator.clipboard.writeText(text);
   } catch (e) {
@@ -302,5 +304,29 @@ $('btn-copy').addEventListener('click', async () => {
     ta.value = text; document.body.appendChild(ta); ta.select();
     document.execCommand('copy'); ta.remove();
   }
-  $('copied').hidden = false;
-});
+}
+
+function copyLabel(filterKey) {
+  const n = countFor(lastRows, filterKey);
+  if (!filterKey) return `전체 표 복사 (${n})`;
+  const r = RETIREES.find((x) => x.key === filterKey);
+  return `${r.label} 참여자 표 (${n})`;
+}
+
+function refreshCopyButtons() {
+  for (const b of COPY_BUTTONS) {
+    const el = $(b.id);
+    el.textContent = copyLabel(b.filterKey);
+    // 낡은 표를 메일 수신자 목록으로 쓰면 안 된다. 0명이면 헤더만 복사할 이유가 없다.
+    el.disabled = stale || countFor(lastRows, b.filterKey) === 0;
+  }
+}
+
+for (const b of COPY_BUTTONS) {
+  $(b.id).addEventListener('click', async () => {
+    if (stale) return;
+    if (countFor(lastRows, b.filterKey) === 0) return;
+    await toClipboard(buildTable(lastRows, RETIREES, b.filterKey));
+    $('copied').hidden = false;
+  });
+}
