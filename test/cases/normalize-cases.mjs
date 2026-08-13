@@ -24,7 +24,7 @@ export const NAME_CASES = [
   { input: '홍길동',    expected: '홍길동', why: '그대로' },
   { input: '홍 길동',   expected: '홍길동', why: '가운데 공백' },
   { input: '  홍길동 ', expected: '홍길동', why: '앞뒤 공백' },
-  { input: '홍　길동',  expected: '홍길동', why: '전각 공백' },
+  { input: '홍\u3000길동',  expected: '홍길동', why: '전각 공백' },
   { input: '카림 유수프', expected: '카림유수프', why: '외국인 이름(가상) — 띄어쓰기가 사람마다 갈린다' },
   { input: '응우옌 티린', expected: '응우옌티린', why: '외국인 이름(가상)' },
   { input: 'Oh Jihun', expected: 'OhJihun', why: '영문 표기' },
@@ -66,6 +66,21 @@ export const EMAIL_CASES = [
   { input: 'a b', expected: null, why: '가운데 공백 — 두 사람을 붙여 친 것일 수 있어 통과시키면 안 된다' },
   { input: 'a!b', expected: null, why: '허용하지 않는 기호' },
   { input: 'a/b', expected: null, why: '허용하지 않는 기호' },
+
+  // 아래는 붙여넣기 사고와 눈에 안 보이는 문자를 못 박아두는 케이스들이다.
+  { input: 'abc@etri.re.kr@etri.re.kr', expected: 'abc@etri.re.kr',
+    why: '전체 이메일을 두 번 붙여넣음 — 첫 @ 앞만 취해 흡수한다' },
+  { input: 'a\tb', expected: null, why: '가운데 탭 — 공백과 같이 잘못 친 것으로 본다' },
+  { input: 'a\u3000b', expected: null, why: '가운데 전각 공백 (한글 IME 에서 흔하다)' },
+  { input: 'a\u200bb', expected: null, why: '가운데 제로폭 공백 — 다른 시스템에서 복사할 때 딸려온다' },
+  { input: '\u3000abc\u3000', expected: 'abc@etri.re.kr', why: '앞뒤 전각 공백은 다듬는다' },
+
+  // 아래 둘은 통과가 맞다. 실제 이메일 규격은 점으로 시작/끝나는 아이디를 금지하지만,
+  // 여기서는 관대한 쪽을 택했다 — 규칙이 빡빡해서 멀쩡한 사람이 못 들어오는 것이
+  // 오타 아이디로 빈 행 하나 생기는 것보다 나쁘다. 오타는 화면 힌트에 그대로 보이고
+  // 관리자가 지울 수 있다.
+  { input: '.abc', expected: '.abc@etri.re.kr', why: '점으로 시작 — 관대하게 통과시킨다' },
+  { input: 'hong..gildong', expected: 'hong..gildong@etri.re.kr', why: '점 두 개 — 관대하게 통과시킨다' },
   { input: null, expected: null, why: 'null' },
   { input: undefined, expected: null, why: 'undefined' },
 ];
