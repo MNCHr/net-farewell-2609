@@ -18,7 +18,9 @@
        편한 대로 선택해주세요. 다른 분이 무엇을 골랐는지는 아무도 볼 수 없습니다.</p>
     <p class="muted">
       · 금액은 참여 인원이 확정된 뒤 n분의 1로 나눕니다<br>
-      · 제출한 뒤에도 언제든 다시 들어와 고칠 수 있습니다
+      · 제출한 뒤에도 언제든 다시 들어와 고칠 수 있습니다<br>
+      · <b>회사 계정 비밀번호는 묻지 않습니다.</b> 이 조사에서만 쓸 숫자 4자리를
+        그 자리에서 정하시면 됩니다
     </p>
     <button id="btn-start">시작하기</button>
   </section>
@@ -36,10 +38,13 @@
     <label for="f-name">이름</label>
     <input id="f-name" type="text" autocomplete="off" placeholder="예: 홍길동">
 
-    <label for="f-pw">비밀번호</label>
+    <label for="f-pw">이 조사에서만 쓸 임시 비밀번호</label>
     <input id="f-pw" type="password" inputmode="numeric" autocomplete="off"
            maxlength="4" placeholder="숫자 4자리">
-    <div class="hint">수정할 때 필요합니다. 꼭 기억해주세요.</div>
+    <div class="hint">
+      <b>회사 계정 비밀번호가 아닙니다.</b> 아무 숫자 4자리나 지금 정하시면 됩니다.<br>
+      나중에 고치러 오실 때 이 번호가 필요하니 기억해주세요.
+    </div>
 
     <div id="login-err" class="err" hidden></div>
     <button id="btn-login">확인</button>
@@ -75,7 +80,8 @@
     <h1>제출되었습니다</h1>
     <p class="sub">감사합니다.</p>
     <div id="done-list"></div>
-    <p class="muted">마음이 바뀌시면 같은 이메일·이름·비밀번호로 다시 들어오셔서 고치시면 됩니다.</p>
+    <p class="muted">마음이 바뀌시면 같은 이메일·이름과 방금 정하신 임시 비밀번호로
+      다시 들어오셔서 고치시면 됩니다.</p>
     <button id="btn-again" class="ghost">처음으로</button>
   </section>
 
