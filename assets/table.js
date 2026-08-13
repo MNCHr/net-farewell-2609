@@ -6,9 +6,17 @@
  * 세 개의 복사 버튼이 같은 코드 경로를 쓴다는 것도 구조로 보장된다.
  */
 
-/** filterKey: null 이면 전체, 'A'/'B' 면 그 퇴직자를 선택한 행만. */
+/**
+ * filterKey: null 이면 전체, 'A'/'B' 면 그 퇴직자를 선택한 행만.
+ *
+ * 'A'/'B' 두 값만 다룬다고 못 박아둔다. `else` 로 뭉뚱그리면 나중에 퇴직자가
+ * 셋이 되는 날 C 필터가 조용히 B 명단을 내놓는다 — 명단을 메일 수신자로 쓰는
+ * 화면이라 조용히 틀리는 것이 제일 나쁘다.
+ */
 function pick(row, key) {
-  return key === 'A' ? !!row.pickA : !!row.pickB;
+  if (key === 'A') return !!row.pickA;
+  if (key === 'B') return !!row.pickB;
+  throw new Error('알 수 없는 퇴직자 키: ' + key);
 }
 
 function filterRows(rows, filterKey) {
