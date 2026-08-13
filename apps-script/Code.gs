@@ -65,6 +65,26 @@ function normalizePw_(raw) {
   return s;
 }
 
+/** assets/normalize.js 의 EMAIL_DOMAIN 과 반드시 같아야 한다. */
+var EMAIL_DOMAIN = 'etri.re.kr';
+var LOCAL_PART_MAX = 64;
+var LOCAL_PART_RE_ = new RegExp('^[a-z0-9._+-]{1,' + LOCAL_PART_MAX + '}$');
+
+/**
+ * 'abc' / 'ABC' / 'abc@etri.re.kr' → 'abc@etri.re.kr'.
+ *
+ * 아이디(@ 앞)만 신원으로 쓰고 도메인은 버린다. 도메인을 신원에 포함시키면
+ * 같은 사람이 입력 방식에 따라 두 행으로 갈라진다.
+ */
+function normalizeEmail_(raw) {
+  if (raw === null || raw === undefined) return null;
+  var cleaned = String(raw).trim().toLowerCase();
+  var at = cleaned.indexOf('@');
+  var local = at >= 0 ? cleaned.slice(0, at) : cleaned;
+  if (!LOCAL_PART_RE_.test(local)) return null;
+  return local + '@' + EMAIL_DOMAIN;
+}
+
 function ok_(data) {
   return { ok: true, data: data };
 }

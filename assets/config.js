@@ -13,3 +13,10 @@ export const RETIREES = [
 ];
 
 export const ORG_LABEL = '네트워크연구본부';
+
+/**
+ * 로그인 아이디에 붙일 회사 이메일 도메인. '@' 는 포함하지 않는다.
+ * apps-script/Code.gs 의 EMAIL_DOMAIN 과 반드시 같아야 한다 —
+ * 어긋나면 화면에 보이는 값과 실제 저장되는 값이 달라진다.
+ */
+export const EMAIL_DOMAIN = 'etri.re.kr';

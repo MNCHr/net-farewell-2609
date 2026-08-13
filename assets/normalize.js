@@ -5,6 +5,8 @@
  * test/cases/normalize-cases.mjs 가 두 구현을 함께 검증한다.
  */
 
+import { EMAIL_DOMAIN } from './config.js';
+
 const FULLWIDTH_DIGITS = /[０-９]/g;
 const NON_DIGIT = /[^0-9]/g;
 // \s 는 U+3000(전각 공백)도 포함하지만, 제로폭 문자는 따로 지워야 한다.
@@ -48,4 +50,22 @@ export function normalizePw(raw) {
   const s = toHalfWidthDigits(String(raw)).replace(WHITESPACE, '');
   if (!PW_RE.test(s)) return null;
   return s;
+}
+
+export const LOCAL_PART_MAX = 64;
+
+const LOCAL_PART_RE = new RegExp(`^[a-z0-9._+-]{1,${LOCAL_PART_MAX}}$`);
+
+/**
+ * 'abc' / 'ABC' / 'abc@etri.re.kr' → 'abc@etri.re.kr'.
+ *
+ * 아이디(@ 앞)만 신원으로 쓰고 도메인은 버린다. 도메인을 신원에 포함시키면
+ * 같은 사람이 입력 방식에 따라 두 행으로 갈라진다.
+ */
+export function normalizeEmail(raw) {
+  if (raw === null || raw === undefined) return null;
+  const cleaned = String(raw).trim().toLowerCase();
+  const local = cleaned.indexOf('@') >= 0 ? cleaned.slice(0, cleaned.indexOf('@')) : cleaned;
+  if (!LOCAL_PART_RE.test(local)) return null;
+  return local + '@' + EMAIL_DOMAIN;
 }

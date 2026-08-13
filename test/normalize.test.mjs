@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeEmpNo, normalizeName, normalizePw } from '../assets/normalize.js';
+import { normalizeEmpNo, normalizeName, normalizePw, normalizeEmail } from '../assets/normalize.js';
 import { loadServer } from './harness/load-code-gs.mjs';
-import { EMPNO_CASES, NAME_CASES, PW_CASES } from './cases/normalize-cases.mjs';
+import { EMPNO_CASES, NAME_CASES, PW_CASES, EMAIL_CASES } from './cases/normalize-cases.mjs';
 
 const server = loadServer().fn;
 
@@ -45,5 +45,24 @@ test('두 구현이 같은 입력에 같은 답을 낸다', () => {
     assert.equal(normalizeEmpNo(raw), server.normalizeEmpNo_(raw), `사번 ${JSON.stringify(raw)}`);
     assert.equal(normalizeName(raw), server.normalizeName_(raw), `이름 ${JSON.stringify(raw)}`);
     assert.equal(normalizePw(raw), server.normalizePw_(raw), `비번 ${JSON.stringify(raw)}`);
+  }
+});
+
+test('[브라우저] 이메일 정규화', () => {
+  for (const c of EMAIL_CASES) {
+    assert.equal(normalizeEmail(c.input), c.expected, `${JSON.stringify(c.input)} — ${c.why}`);
+  }
+});
+
+test('[서버] 이메일 정규화', () => {
+  for (const c of EMAIL_CASES) {
+    assert.equal(server.normalizeEmail_(c.input), c.expected, `${JSON.stringify(c.input)} — ${c.why}`);
+  }
+});
+
+test('이메일 정규화도 두 구현이 같은 답을 낸다', () => {
+  const inputs = ['abc', 'ABC', 'abc@etri.re.kr', 'abc@etri.kr', 'a b', '', '가나다', 'a'.repeat(65)];
+  for (const raw of inputs) {
+    assert.equal(normalizeEmail(raw), server.normalizeEmail_(raw), JSON.stringify(raw));
   }
 });

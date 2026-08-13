@@ -40,6 +40,36 @@ export const NAME_CASES = [
   { input: null,        expected: null,    why: 'null' },
 ];
 
+// 이메일 신원. 아이디(@ 앞)만 신원으로 쓰고, 저장할 때 도메인을 붙인다.
+// 도메인을 신원에 넣으면 같은 사람이 'abc' 와 'abc@etri.re.kr' 로 갈라진다 —
+// 사번의 앞자리 0과 같은 함정이다.
+export const EMAIL_CASES = [
+  { input: 'abc', expected: 'abc@etri.re.kr', why: '아이디만 입력 — 기본 사용법' },
+  { input: 'ABC', expected: 'abc@etri.re.kr', why: '대문자로 쳐도 같은 사람' },
+  { input: 'AbC', expected: 'abc@etri.re.kr', why: '섞어 쳐도 같은 사람' },
+  { input: 'abc@etri.re.kr', expected: 'abc@etri.re.kr', why: '전체 이메일 붙여넣기 — 가장 흔할 입력 편차' },
+  { input: 'ABC@ETRI.RE.KR', expected: 'abc@etri.re.kr', why: '전체 이메일을 대문자로' },
+  { input: 'abc@etri.kr', expected: 'abc@etri.re.kr', why: '도메인이 달라도 아이디가 같으면 같은 사람' },
+  { input: 'abc@', expected: 'abc@etri.re.kr', why: '@ 까지만 치고 만 경우 — 아이디가 유효하면 통과' },
+  { input: ' abc ', expected: 'abc@etri.re.kr', why: '앞뒤 공백' },
+  { input: 'hong.gildong', expected: 'hong.gildong@etri.re.kr', why: '점' },
+  { input: 'hgd_2', expected: 'hgd_2@etri.re.kr', why: '밑줄' },
+  { input: 'gildong-h', expected: 'gildong-h@etri.re.kr', why: '하이픈' },
+  { input: 'a+b', expected: 'a+b@etri.re.kr', why: '플러스' },
+  { input: 'a', expected: 'a@etri.re.kr', why: '한 글자' },
+  { input: 'a'.repeat(64), expected: 'a'.repeat(64) + '@etri.re.kr', why: '경계값 64자는 통과' },
+  { input: 'a'.repeat(65), expected: null, why: '64자 초과' },
+  { input: '@etri.re.kr', expected: null, why: '@ 앞이 비었다' },
+  { input: '', expected: null, why: '빈 값' },
+  { input: '   ', expected: null, why: '공백뿐' },
+  { input: '가나다', expected: null, why: '한글은 아이디에 못 쓴다' },
+  { input: 'a b', expected: null, why: '가운데 공백 — 두 사람을 붙여 친 것일 수 있어 통과시키면 안 된다' },
+  { input: 'a!b', expected: null, why: '허용하지 않는 기호' },
+  { input: 'a/b', expected: null, why: '허용하지 않는 기호' },
+  { input: null, expected: null, why: 'null' },
+  { input: undefined, expected: null, why: 'undefined' },
+];
+
 export const PW_CASES = [
   { input: '1234',  expected: '1234', why: '그대로' },
   { input: '0000',  expected: '0000', why: '앞자리 0 유지 — 채우지 않고 그대로 둔다' },
