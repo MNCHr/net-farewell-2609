@@ -268,7 +268,7 @@ function clearFailure_(row) {
  */
 function verifyCredentials_(req) {
   var email = normalizeEmail_(req.email);
-  if (!email) return err_('BAD_EMAIL', '사번은 숫자 5자리입니다. 다시 확인해주세요.');
+  if (!email) return err_('BAD_EMAIL', '이메일 아이디를 확인해주세요. 영문·숫자와 . _ - + 만 쓸 수 있습니다.');
 
   var name = normalizeName_(req.name);
   if (!name) return err_('BAD_NAME', '이름을 입력해주세요.');
@@ -282,7 +282,7 @@ function verifyCredentials_(req) {
   if (!row) return { row: null, mode: 'new', email: email, name: name, pw: pw };
 
   if (row.name !== name) {
-    return err_('NAME_MISMATCH', '사번과 이름이 일치하지 않습니다. 다시 확인해주세요.');
+    return err_('NAME_MISMATCH', '이메일과 이름이 일치하지 않습니다. 다시 확인해주세요.');
   }
 
   var locked = checkLock_(row);
@@ -338,7 +338,7 @@ function handleSave_(req) {
     var action;
 
     if (!row) {
-      // 삭제된 행이 있으면 되살린다. 같은 사번의 active 행이 둘이 되면 안 된다.
+      // 삭제된 행이 있으면 되살린다. 같은 이메일의 active 행이 둘이 되면 안 된다.
       var buried = findAnyByEmail_(readRows_(), v.email);
       if (buried.length > 0) {
         row = buried[0];
@@ -481,7 +481,7 @@ function computeWarnings_(rows) {
     }
   }
 
-  // 같은 사번은 active 가 하나뿐이므로 삭제분까지 봐야 잡힌다. 같은 이유로 Object.create(null).
+  // 같은 이메일은 active 가 하나뿐이므로 삭제분까지 봐야 잡힌다. 같은 이유로 Object.create(null).
   var byEmp = Object.create(null);
   for (var j = 0; j < rows.length; j += 1) {
     var e = rows[j].email;
@@ -540,10 +540,10 @@ function handleAdminResetPw_(req) {
     if (denied) return denied;
 
     var email = normalizeEmail_(req.email);
-    if (!email) return err_('BAD_EMAIL', '사번은 숫자 5자리입니다.');
+    if (!email) return err_('BAD_EMAIL', '이메일 아이디를 확인해주세요.');
 
     var row = findByEmail_(readRows_(), email);
-    if (!row) return err_('NOT_FOUND', '해당 사번의 응답이 없습니다.');
+    if (!row) return err_('NOT_FOUND', '해당 이메일의 응답이 없습니다.');
 
     row.pwHash = '';
     row.salt = '';
@@ -562,7 +562,7 @@ function handleAdminUpsert_(req) {
     if (denied) return denied;
 
     var email = normalizeEmail_(req.email);
-    if (!email) return err_('BAD_EMAIL', '사번은 숫자 5자리입니다.');
+    if (!email) return err_('BAD_EMAIL', '이메일 아이디를 확인해주세요.');
     var name = normalizeName_(req.name);
     if (!name) return err_('BAD_NAME', '이름을 입력해주세요.');
 
@@ -604,10 +604,10 @@ function handleAdminDelete_(req) {
     if (denied) return denied;
 
     var email = normalizeEmail_(req.email);
-    if (!email) return err_('BAD_EMAIL', '사번은 숫자 5자리입니다.');
+    if (!email) return err_('BAD_EMAIL', '이메일 아이디를 확인해주세요.');
 
     var row = findByEmail_(readRows_(), email);
-    if (!row) return err_('NOT_FOUND', '해당 사번의 응답이 없습니다.');
+    if (!row) return err_('NOT_FOUND', '해당 이메일의 응답이 없습니다.');
 
     row.status = 'deleted';
     row.updatedAt = now_().toISOString();
@@ -695,7 +695,7 @@ function headerRowOk_(row) {
  * 시트는 만들었지만 헤더 행을 빼먹은 경우를 잡는다. 그 상태에서도 sheetOk 는 true 라서
  * 이걸 따로 확인하지 않으면: 첫 응답자의 제출이 1행(헤더 자리)에 실려 readRows_ 가
  * 영원히 건너뛰고, 집계는 0을 가리키고, 그 사람은 재로그인 때 '신규'로 취급되어
- * 다시 제출하면 같은 사번의 active 행이 둘 생긴다.
+ * 다시 제출하면 같은 이메일의 active 행이 둘 생긴다.
  */
 function handlePing_() {
   var sheetOk = false;

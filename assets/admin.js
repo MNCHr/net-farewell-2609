@@ -120,8 +120,8 @@ function renderWarnings(warnings) {
     const d = document.createElement('div');
     d.className = 'warn';
     d.textContent = w.type === 'SAME_NAME_DIFF_EMAIL'
-      ? `‘${w.name}’ 님이 사번 ${w.emails.join(' / ')} 로 두 건 있습니다. 사번 오타일 수 있습니다.`
-      : `사번 ${w.email} 에 이름이 ${w.names.join(' / ')} 로 다르게 기록돼 있습니다.`;
+      ? `‘${w.name}’ 님이 이메일 ${w.emails.join(' / ')} 로 두 건 있습니다. 이메일 오타일 수 있습니다.`
+      : `이메일 ${w.email} 에 이름이 ${w.names.join(' / ')} 로 다르게 기록돼 있습니다.`;
     box.appendChild(d);
   });
 }
@@ -131,7 +131,7 @@ function renderRows(rows) {
   table.innerHTML = '';
 
   const head = document.createElement('tr');
-  ['사번', '이름', RETIREES[0].label, RETIREES[1].label, '최종수정', ''].forEach((h) => {
+  ['이메일', '이름', RETIREES[0].label, RETIREES[1].label, '최종수정', ''].forEach((h) => {
     const th = document.createElement('th');
     th.textContent = h;
     head.appendChild(th);
@@ -203,11 +203,11 @@ async function del(r) {
 }
 
 function loadIntoUpsert(r) {
-  $('u-empno').value = r.email;
+  $('u-email').value = r.email;
   $('u-name').value = r.name;
   $('up-A').checked = r.pickA;
   $('up-B').checked = r.pickB;
-  $('u-empno').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('u-email').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function renderUpsertPicks() {
@@ -239,9 +239,9 @@ function pickText(pickA, pickB) {
 }
 
 /**
- * 저장 전 확인창. 사번이 기존 응답과 겹치면 "덮어쓴다"는 사실과 기존/변경 후 선택을
- * 나란히 보여준다 — 대리 입력 중 사번 오타로 남의 응답을 지우는 사고를 여기서 잡기 위해서다.
- * 겹치지 않으면 정규화된 사번·이름으로 새로 추가된다는 점을 보여준다(01234 vs 1234 오인 방지).
+ * 저장 전 확인창. 이메일이 기존 응답과 겹치면 "덮어쓴다"는 사실과 기존/변경 후 선택을
+ * 나란히 보여준다 — 대리 입력 중 이메일 오타로 남의 응답을 지우는 사고를 여기서 잡기 위해서다.
+ * 겹치지 않으면 정규화된 이메일·이름으로 새로 추가된다는 점을 보여준다(대소문자 오인 방지).
  */
 function confirmUpsert(email, name, pickA, pickB) {
   const existing = findExistingRow(email);
@@ -253,7 +253,7 @@ function confirmUpsert(email, name, pickA, pickB) {
       + '계속할까요?'
     );
   }
-  return confirm(`사번 ${email}, 이름 ${name} 으로 새 응답을 추가합니다.\n계속할까요?`);
+  return confirm(`이메일 ${email}, 이름 ${name} 으로 새 응답을 추가합니다.\n계속할까요?`);
 }
 
 function showSaved(created) {
@@ -268,9 +268,9 @@ $('btn-upsert').addEventListener('click', async () => {
   if (stale) return showErr('u-err', '목록을 다시 불러오지 못해 최신 상태인지 알 수 없어 저장을 막았습니다. 위 배너의 다시 불러오기를 누른 뒤 다시 시도해주세요.');
   clearErr('u-err');
   $('u-saved').hidden = true;
-  const email = normalizeEmail($('u-empno').value);
+  const email = normalizeEmail($('u-email').value);
   const name = normalizeName($('u-name').value);
-  if (!email) return showErr('u-err', '사번은 숫자 5자리입니다.');
+  if (!email) return showErr('u-err', '이메일 아이디를 확인해주세요.');
   if (!name) return showErr('u-err', '이름을 입력해주세요.');
 
   const pickA = $('up-A').checked;
@@ -280,7 +280,7 @@ $('btn-upsert').addEventListener('click', async () => {
   const res = await api.send({ action: 'adminUpsert', adminPw, email, name, pickA, pickB });
   if (!res.ok) return showErr('u-err', res.message);
 
-  $('u-empno').value = ''; $('u-name').value = '';
+  $('u-email').value = ''; $('u-name').value = '';
   $('up-A').checked = false; $('up-B').checked = false;
   showSaved(res.data.created);
   await refreshAfterWrite();
@@ -290,7 +290,7 @@ $('btn-upsert').addEventListener('click', async () => {
 
 $('btn-copy').addEventListener('click', async () => {
   if (stale) return; // 최신 상태가 아닐 수 있는 표를 정산 시트로 복사하면 안 된다.
-  const header = ['사번', '이름', RETIREES[0].label, RETIREES[1].label, '최종수정'].join('\t');
+  const header = ['이메일', '이름', RETIREES[0].label, RETIREES[1].label, '최종수정'].join('\t');
   const body = lastRows.map((r) => [
     r.email, r.name, r.pickA ? 'O' : '', r.pickB ? 'O' : '', r.updatedAt,
   ].join('\t'));

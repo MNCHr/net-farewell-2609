@@ -1,4 +1,4 @@
-import { EXEC_URL, RETIREES, ORG_LABEL } from './config.js';
+import { EXEC_URL, RETIREES, ORG_LABEL, EMAIL_DOMAIN } from './config.js';
 import { createApi } from './api.js';
 import { normalizeEmail, normalizeName, normalizePw } from './normalize.js';
 
@@ -17,27 +17,28 @@ const session = { email: '', name: '', pw: '', picks: { A: false, B: false } };
 /* ---------- 1단계 ---------- */
 $('intro-sub').textContent =
   `${ORG_LABEL} ${RETIREES.map((r) => r.label).join(' · ')}의 퇴임을 앞두고 선물을 준비합니다.`;
-$('btn-start').addEventListener('click', () => { show('step-login'); $('f-empno').focus(); });
+$('btn-start').addEventListener('click', () => { show('step-login'); $('f-email').focus(); });
 $('btn-back-intro').addEventListener('click', () => show('step-intro'));
 
 /* ---------- 2단계 ---------- */
-const empnoInput = $('f-empno');
-const hintEmpno = $('hint-empno');
+const emailInput = $('f-email');
+const hintEmail = $('hint-email');
+const HINT_IDLE = `@${EMAIL_DOMAIN} 은 빼고 아이디만 쓰셔도 됩니다.`;
 
-empnoInput.addEventListener('input', () => {
-  const raw = empnoInput.value;
+emailInput.addEventListener('input', () => {
+  const raw = emailInput.value;
   if (raw.trim() === '') {
-    hintEmpno.className = 'hint';
-    hintEmpno.textContent = '5자리입니다. 앞의 0은 빼고 쓰셔도 됩니다.';
+    hintEmail.className = 'hint';
+    hintEmail.textContent = HINT_IDLE;
     return;
   }
   const norm = normalizeEmail(raw);
   if (norm) {
-    hintEmpno.className = 'hint ok';
-    hintEmpno.textContent = `사번 ${norm} 으로 조회합니다`;
+    hintEmail.className = 'hint ok';
+    hintEmail.textContent = `${norm} 으로 조회합니다`;
   } else {
-    hintEmpno.className = 'hint bad';
-    hintEmpno.textContent = '사번은 숫자 5자리입니다. 다시 확인해주세요.';
+    hintEmail.className = 'hint bad';
+    hintEmail.textContent = '아이디는 영문·숫자와 . _ - + 만 쓸 수 있습니다.';
   }
 });
 
@@ -51,11 +52,11 @@ function clearErr(boxId) { $(boxId).hidden = true; }
 async function doLogin() {
   clearErr('login-err');
 
-  const email = normalizeEmail(empnoInput.value);
+  const email = normalizeEmail(emailInput.value);
   const name = normalizeName($('f-name').value);
   const pw = normalizePw($('f-pw').value);
 
-  if (!email) return showErr('login-err', '사번은 숫자 5자리입니다.');
+  if (!email) return showErr('login-err', '이메일 아이디를 확인해주세요.');
   if (!name) return showErr('login-err', '이름을 입력해주세요.');
   if (!pw) return showErr('login-err', '비밀번호는 숫자 4자리입니다.');
 
@@ -74,7 +75,7 @@ async function doLogin() {
   session.picks = res.data.picks;
 
   if (res.data.mode === 'new') {
-    $('c-empno').textContent = session.email;
+    $('c-email').textContent = session.email;
     $('c-name').textContent = session.name;
     show('step-confirm');
   } else {
@@ -87,7 +88,7 @@ $('btn-login').addEventListener('click', doLogin);
 $('f-pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
 
 /* ---------- 3단계 ---------- */
-$('btn-confirm-no').addEventListener('click', () => { show('step-login'); empnoInput.focus(); });
+$('btn-confirm-no').addEventListener('click', () => { show('step-login'); emailInput.focus(); });
 $('btn-confirm-yes').addEventListener('click', () => { renderPicks(); show('step-pick'); });
 
 /* ---------- 4단계 ---------- */
@@ -155,9 +156,9 @@ function renderDone() {
 $('btn-again').addEventListener('click', () => {
   session.email = ''; session.name = ''; session.pw = '';
   session.picks = { A: false, B: false };
-  ['f-empno', 'f-name', 'f-pw'].forEach((id) => { $(id).value = ''; });
-  hintEmpno.className = 'hint';
-  hintEmpno.textContent = '5자리입니다. 앞의 0은 빼고 쓰셔도 됩니다.';
+  ['f-email', 'f-name', 'f-pw'].forEach((id) => { $(id).value = ''; });
+  hintEmail.className = 'hint';
+  hintEmail.textContent = HINT_IDLE;
   show('step-intro');
 });
 
