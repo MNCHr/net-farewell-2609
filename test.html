@@ -44,7 +44,26 @@ async function timed(fn) {
   }
 }
 
+// 검사가 도는 중에 [다시 검사]를 또 누르면 두 실행이 겹쳐서 결과가 뒤섞인다.
+// 진단 결과는 그대로 복사해 전달하는 것이라 뒤섞이면 판독이 안 된다.
+let running = false;
+
 async function run() {
+  if (running) return;
+  running = true;
+  const runBtn = document.getElementById('run');
+  runBtn.disabled = true;
+  runBtn.textContent = '검사 중…';
+  try {
+    await runChecks();
+  } finally {
+    running = false;
+    runBtn.disabled = false;
+    runBtn.textContent = '다시 검사';
+  }
+}
+
+async function runChecks() {
   results.innerHTML = '';
   lines.length = 0;
   lines.push('시각: ' + new Date().toISOString());
