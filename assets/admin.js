@@ -311,7 +311,7 @@ async function toClipboard(text) {
 }
 
 /** filterKey 가 RETIREES 에 없는 키면(설정/COPY_BUTTONS 어긋남) 여기서 바로 알 수 있게 던진다
- *  — assets/table.js 의 pick() 과 같은 이유다. 그냥 두면 r.label 에서 이유를 알 수 없는
+ *  — assets/table.js 의 filterRows() 와 같은 이유다. 그냥 두면 r.label 에서 이유를 알 수 없는
  *  TypeError 로 죽어 관리자 화면 전체가 하얗게 빈다. */
 function retireeByKey(key) {
   const r = RETIREES.find((x) => x.key === key);
