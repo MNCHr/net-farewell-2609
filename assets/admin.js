@@ -2,6 +2,7 @@ import { EXEC_URL, RETIREES } from './config.js';
 import { createApi } from './api.js';
 import { normalizeEmail, normalizeName } from './normalize.js';
 import { buildTable, countFor } from './table.js';
+import { warningMessage } from './warnings.js';
 
 const api = createApi({ execUrl: EXEC_URL });
 const $ = (id) => document.getElementById(id);
@@ -122,9 +123,7 @@ function renderWarnings(warnings) {
   warnings.forEach((w) => {
     const d = document.createElement('div');
     d.className = 'warn';
-    d.textContent = w.type === 'SAME_NAME_DIFF_EMAIL'
-      ? `‘${w.name}’ 님이 이메일 ${w.emails.join(' / ')} 로 두 건 있습니다. 이메일 오타일 수 있습니다.`
-      : `이메일 ${w.email} 에 이름이 ${w.names.join(' / ')} 로 다르게 기록돼 있습니다.`;
+    d.textContent = warningMessage(w);
     box.appendChild(d);
   });
 }
