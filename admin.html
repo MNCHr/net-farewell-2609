@@ -42,11 +42,24 @@
         <button id="btn-stale-retry" class="ghost">다시 불러오기</button>
       </div>
       <div class="scroll"><table id="rows"></table></div>
+
+      <p class="muted">메일용 — 각 퇴직자께 마음을 보탠 분들 (둘 다 고른 분 포함)</p>
       <div class="row-btns">
-        <button id="btn-copy" class="ghost">전체 표 복사</button>
         <button id="btn-copy-A" class="ghost">A 참여자 표</button>
         <button id="btn-copy-B" class="ghost">B 참여자 표</button>
       </div>
+
+      <p class="muted">정산용 — 받을 금액이 다른 세 무리</p>
+      <div class="row-btns">
+        <button id="btn-copy-both" class="ghost">둘 다</button>
+        <button id="btn-copy-only-A" class="ghost">A만</button>
+        <button id="btn-copy-only-B" class="ghost">B만</button>
+      </div>
+
+      <div class="row-btns">
+        <button id="btn-copy" class="ghost">전체 표 복사</button>
+      </div>
+
       <div class="warn">메일은 반드시 숨은참조(BCC)로 보내세요. 받는사람·참조에 넣으면 누가 참여했는지 서로에게 다 보입니다.</div>
       <p class="muted" id="copied" hidden></p>
     </section>

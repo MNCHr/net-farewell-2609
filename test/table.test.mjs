@@ -61,3 +61,62 @@ test('알 수 없는 퇴직자 키는 던진다', () => {
   // C 필터가 조용히 B 명단을 내놓는다.
   assert.throws(() => buildTable(ROWS, RETIREES, 'C'));
 });
+
+/* ---------- 정산용 배타 필터 (BOTH / ONLY_A / ONLY_B) ---------- */
+
+// 셋 다 서로 구분되는, 각기 비어있지 않은 행을 갖춘 픽스처.
+const SETTLE_ROWS = [
+  { email: 'both1@etri.re.kr', name: '둘다1', pickA: true,  pickB: true,  updatedAt: '2026-08-14T01:00:00.000Z' },
+  { email: 'both2@etri.re.kr', name: '둘다2', pickA: true,  pickB: true,  updatedAt: '2026-08-14T02:00:00.000Z' },
+  { email: 'onlyA1@etri.re.kr', name: 'A만1', pickA: true,  pickB: false, updatedAt: '2026-08-14T03:00:00.000Z' },
+  { email: 'onlyB1@etri.re.kr', name: 'B만1', pickA: false, pickB: true,  updatedAt: '2026-08-14T04:00:00.000Z' },
+  { email: 'onlyB2@etri.re.kr', name: 'B만2', pickA: false, pickB: true,  updatedAt: '2026-08-14T05:00:00.000Z' },
+  { email: 'none1@etri.re.kr', name: '없음1', pickA: false, pickB: false, updatedAt: '2026-08-14T06:00:00.000Z' },
+];
+
+test('BOTH 필터는 두 분 다 고른 행만 남긴다', () => {
+  const lines = buildTable(SETTLE_ROWS, RETIREES, 'BOTH').split('\n');
+  assert.deepEqual(lines.slice(1).map((l) => l.split('\t')[0]), ['both1@etri.re.kr', 'both2@etri.re.kr']);
+});
+
+test('ONLY_A 필터는 A만 고른 행만 남긴다 (both, onlyB 는 빠진다)', () => {
+  const lines = buildTable(SETTLE_ROWS, RETIREES, 'ONLY_A').split('\n');
+  assert.deepEqual(lines.slice(1).map((l) => l.split('\t')[0]), ['onlyA1@etri.re.kr']);
+});
+
+test('ONLY_B 필터는 B만 고른 행만 남긴다 (both, onlyA 는 빠진다)', () => {
+  const lines = buildTable(SETTLE_ROWS, RETIREES, 'ONLY_B').split('\n');
+  assert.deepEqual(lines.slice(1).map((l) => l.split('\t')[0]), ['onlyB1@etri.re.kr', 'onlyB2@etri.re.kr']);
+});
+
+test('countFor 가 BOTH/ONLY_A/ONLY_B 인원도 센다', () => {
+  assert.equal(countFor(SETTLE_ROWS, 'BOTH'), 2);
+  assert.equal(countFor(SETTLE_ROWS, 'ONLY_A'), 1);
+  assert.equal(countFor(SETTLE_ROWS, 'ONLY_B'), 2);
+});
+
+test('BOTH/ONLY_A/ONLY_B 는 서로 겹치지 않고, 합치면 최소 하나를 고른 행 전체가 된다', () => {
+  const byKey = (key) => new Set(
+    buildTable(SETTLE_ROWS, RETIREES, key).split('\n').slice(1).map((l) => l.split('\t')[0])
+  );
+  const both = byKey('BOTH');
+  const onlyA = byKey('ONLY_A');
+  const onlyB = byKey('ONLY_B');
+
+  // 겹치지 않는다: 어떤 이메일도 두 무리에 동시에 속하지 않는다.
+  for (const email of both) {
+    assert.ok(!onlyA.has(email), `${email} 이 BOTH 와 ONLY_A 에 동시에 있음`);
+    assert.ok(!onlyB.has(email), `${email} 이 BOTH 와 ONLY_B 에 동시에 있음`);
+  }
+  for (const email of onlyA) {
+    assert.ok(!onlyB.has(email), `${email} 이 ONLY_A 와 ONLY_B 에 동시에 있음`);
+  }
+
+  // 합치면 최소 하나를 고른 행 전체(= A 또는 B, 즉 전체에서 아무것도 안 고른 행 제외)와 같다.
+  const union = new Set([...both, ...onlyA, ...onlyB]);
+  const atLeastOne = new Set(
+    SETTLE_ROWS.filter((r) => r.pickA || r.pickB).map((r) => r.email)
+  );
+  assert.deepEqual(union, atLeastOne);
+  assert.equal(union.size, atLeastOne.size);
+});

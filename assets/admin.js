@@ -292,9 +292,12 @@ $('btn-upsert').addEventListener('click', async () => {
 /* ---------- 표 복사 ---------- */
 
 const COPY_BUTTONS = [
-  { id: 'btn-copy', filterKey: null },
   { id: 'btn-copy-A', filterKey: 'A' },
   { id: 'btn-copy-B', filterKey: 'B' },
+  { id: 'btn-copy-both', filterKey: 'BOTH' },
+  { id: 'btn-copy-only-A', filterKey: 'ONLY_A' },
+  { id: 'btn-copy-only-B', filterKey: 'ONLY_B' },
+  { id: 'btn-copy', filterKey: null },
 ];
 
 async function toClipboard(text) {
@@ -316,15 +319,31 @@ function retireeByKey(key) {
   return r;
 }
 
+/** 필터 키 → 버튼 라벨·복사 완료 문구에 쓸 이름. 두 곳이 같은 이름을 쓰게 한 군데에 묶는다.
+ *  RETIREES 에 없는 키가 오면 retireeByKey 가 던진다 — 여기서도 조용히 틀리면 안 된다. */
+const COPY_NAMES = {
+  A:      () => retireeByKey('A').label,
+  B:      () => retireeByKey('B').label,
+  BOTH:   () => '둘 다',
+  ONLY_A: () => `${retireeByKey('A').label}만`,
+  ONLY_B: () => `${retireeByKey('B').label}만`,
+};
+
+function copyName(filterKey) {
+  const fn = COPY_NAMES[filterKey];
+  if (!fn) throw new Error('알 수 없는 퇴직자 키: ' + filterKey);
+  return fn();
+}
+
 function copyLabel(filterKey) {
   const n = countFor(lastRows, filterKey);
   if (!filterKey) return `전체 표 복사 (${n})`;
-  return `${retireeByKey(filterKey).label} 참여자 표 (${n})`;
+  return `${copyName(filterKey)} (${n})`;
 }
 
 function copiedMessage(filterKey) {
   if (!filterKey) return '전체 표를 클립보드에 담았습니다. 엑셀에 붙여넣으세요.';
-  return `${retireeByKey(filterKey).label} 참여자 표를 클립보드에 담았습니다. 엑셀에 붙여넣으세요.`;
+  return `${copyName(filterKey)} 표를 클립보드에 담았습니다. 엑셀에 붙여넣으세요.`;
 }
 
 function refreshCopyButtons() {

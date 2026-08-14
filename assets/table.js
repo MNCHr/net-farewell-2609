@@ -7,21 +7,30 @@
  */
 
 /**
- * filterKey: null 이면 전체, 'A'/'B' 면 그 퇴직자를 선택한 행만.
+ * filterKey: null 이면 전체, 그 외에는 아래 FILTERS 에 등록된 키만 받는다.
  *
- * 'A'/'B' 두 값만 다룬다고 못 박아둔다. `else` 로 뭉뚱그리면 나중에 퇴직자가
- * 셋이 되는 날 C 필터가 조용히 B 명단을 내놓는다 — 명단을 메일 수신자로 쓰는
- * 화면이라 조용히 틀리는 것이 제일 나쁘다.
+ * - A / B: 그 퇴직자를 선택한 행 (메일용 — 둘 다 고른 사람도 포함된다)
+ * - BOTH / ONLY_A / ONLY_B: 정산용 — 세 무리는 서로 겹치지 않는다.
+ *   A 의 명단은 BOTH 와 ONLY_A 를 섞어 담고 있어 정산(받을 금액이 다름)에는
+ *   못 쓴다. 그래서 배타적인 세 필터를 따로 둔다.
+ *
+ * 키 목록을 여기 한 군데에 못 박아둔다. `else` 로 뭉뚱그리면 나중에 퇴직자가
+ * 셋이 되는 날 이름 모를 필터가 조용히 다른 명단을 내놓는다 — 명단을 메일
+ * 수신자·정산 근거로 쓰는 화면이라 조용히 틀리는 것이 제일 나쁘다.
  */
-function pick(row, key) {
-  if (key === 'A') return !!row.pickA;
-  if (key === 'B') return !!row.pickB;
-  throw new Error('알 수 없는 퇴직자 키: ' + key);
-}
+const FILTERS = {
+  A:      (r) => !!r.pickA,
+  B:      (r) => !!r.pickB,
+  BOTH:   (r) => !!r.pickA && !!r.pickB,
+  ONLY_A: (r) => !!r.pickA && !r.pickB,
+  ONLY_B: (r) => !r.pickA && !!r.pickB,
+};
 
 function filterRows(rows, filterKey) {
   if (!filterKey) return rows.slice();
-  return rows.filter((r) => pick(r, filterKey));
+  const fn = FILTERS[filterKey];
+  if (!fn) throw new Error('알 수 없는 퇴직자 키: ' + filterKey);
+  return rows.filter(fn);
 }
 
 export function countFor(rows, filterKey) {
